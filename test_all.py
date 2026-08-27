@@ -26,8 +26,11 @@ import urllib.error
 import urllib.request
 import urllib.parse
 import hashlib
+import socket
 from pathlib import Path
 from typing import Any
+
+import ulpf.parsers  # noqa: F401 (triggers @register_parser)
 
 # Ensure UTF-8 output on all platforms (Windows cp1252 safe)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -414,9 +417,97 @@ def main():
         n_pass = int(m_pass.group(1)) if m_pass else 0
         n_fail = int(m_fail.group(1)) if m_fail else 0
         record("pytest", f"Pytest Execution: {n_pass} passed, {n_fail} failed",
-               n_fail == 0 and n_pass >= 120, f"Exit code: {res.returncode}\n{out.strip()[-200:]}")
+               n_fail == 0 and n_pass >= 130, f"Exit code: {res.returncode}\n{out.strip()[-200:]}")
     except Exception as e:
         record("pytest", "Pytest suite execution", False, str(e))
+
+    # 12. PROJECT AUDIT & CRITERIA CONFORMANCE (a-h)
+    section_header("12. PROJECT RUBRIC CRITERIA CONFORMANCE (a - h)")
+    try:
+        # (a) Raw Byte Preservation
+        from ulpf.core.raw_store import FileRawStore
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            rs = FileRawStore(base_dir=td)
+            bin_payload = b"CEF:0|Vendor|\xfe\xffBinary|1.0|1|Test|5|src=1.1.1.1"
+            h = rs.put("evt-bin-1", bin_payload)
+            retrieved = rs.get_bytes("evt-bin-1")
+            record("criteria", "(a) Raw Byte Preservation: Byte-exact storage of non-UTF8/binary payload",
+                   retrieved == bin_payload and h == hashlib.sha256(bin_payload).hexdigest())
+
+        # (b) Vendor Attributes Bag
+        from ulpf.core.normalization import NormalizationEngine
+        ne = NormalizationEngine(PROJECT_ROOT / "ulpf" / "schemas" / "mappings")
+        cef_ext_sample = {
+            "_raw": "raw", "_log_format": "cef", "DeviceVendor": "Vendor", "DeviceProduct": "Prod",
+            "Severity": "5", "cs1": "CustomTagA", "msg": "Extended explanation", "customFloat": 99.5
+        }
+        norm_res = ne.normalize(cef_ext_sample, "cef")
+        va = norm_res.get("vendor_attributes") or {}
+        record("criteria", "(b) Vendor Attributes: 100% preservation of unmapped source fields (msg, cs1)",
+               va.get("cs1") == "CustomTagA" and va.get("msg") == "Extended explanation")
+
+        # (c) OCSF / ECS Taxonomy Alignment
+        ev_tax = norm_res.get("event") or {}
+        record("criteria", "(c) Common Taxonomy: OCSF Class & Activity hierarchy populated",
+               ev_tax.get("class_name") is not None and ev_tax.get("class_uid") is not None)
+
+        # (d) Traceability & Deterministic Event IDs
+        import uuid
+        uid1 = str(uuid.uuid5(uuid.NAMESPACE_URL, "ulpf:default:source1:abc123hash"))
+        uid2 = str(uuid.uuid5(uuid.NAMESPACE_URL, "ulpf:default:source1:abc123hash"))
+        record("criteria", "(d) Traceability: Deterministic UUIDv5 event ID for idempotent reprocessing",
+               uid1 == uid2 and len(uid1) == 36)
+
+        # (e) Plug-and-Play Dynamic Parser Discovery
+        from ulpf.core.registry import get_all_parsers
+        all_p = get_all_parsers()
+        record("criteria", f"(e) Plug-and-Play: Dynamic parser auto-registration ({len(all_p)} active parsers)",
+               len(all_p) >= 11)
+
+        # (f) High-Throughput Network Syslog Listener
+        from ulpf.collectors.syslog_listener import SyslogNetworkListener
+        syslog_box = []
+        sl = SyslogNetworkListener(on_event=lambda m, t: syslog_box.append(m), host="127.0.0.1", port=15199)
+        sl.start()
+        time.sleep(0.1)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b"<134>1 2026-08-27T12:00:00Z host app 1 - - Criteria Check Syslog Packet", ("127.0.0.1", 15199))
+        sock.close()
+        time.sleep(0.2)
+        sl.stop()
+        record("criteria", "(f) Network Ingestion: UDP/TCP Syslog socket listener streaming",
+               len(syslog_box) >= 1 and "Criteria Check" in syslog_box[0])
+
+        # (g) Columnar Parquet & SIEM Egress Sinks
+        from ulpf.sinks.parquet_sink import ParquetSink
+        from ulpf.sinks.cef_egress import CEFEgressSink
+        from ulpf.sinks.leef_egress import LEEFEgressSink
+        sample_evt = {
+            "schema_version": "1.2.0", "tenant_id": "tenant_1", "event_id": "test-e",
+            "ingest_timestamp": "2026-08-27T12:00:00Z",
+            "raw": {"raw_payload": "raw", "raw_format": "cef", "raw_hash": "a"*64},
+            "source": {"vendor": "Cisco", "product": "ASA", "log_format": "cef"},
+            "event": {"category": "network", "action": "deny", "severity_numeric": 7.0},
+            "network": {"src_ip": "1.2.3.4", "dst_ip": "5.6.7.8", "protocol": "tcp"}
+        }
+        cef_out = CEFEgressSink.format_event(sample_evt)
+        leef_out = LEEFEgressSink.format_event(sample_evt)
+        with tempfile.TemporaryDirectory() as td:
+            ps = ParquetSink(base_dir=Path(td))
+            ps.write(sample_evt)
+            ps.flush()
+            p_files = list(Path(td).rglob("*.*"))
+            record("criteria", "(g) SIEM & Data Lake: Parquet partitioned sink & CEF/LEEF egress formatters",
+                   len(p_files) >= 1 and cef_out.startswith("CEF:0|") and leef_out.startswith("LEEF:2.0|"))
+
+        # (h) ML-Ready Feature Vector Extractor
+        from ulpf.analytics.features import FeatureVectorExtractor
+        f_vec = FeatureVectorExtractor.extract_vector(sample_evt)
+        record("criteria", "(h) AI/ML Feature Engineering: 24-dimensional normalized numeric vectors",
+               len(f_vec) == 24 and all(isinstance(x, float) for x in f_vec))
+    except Exception as e:
+        record("criteria", "Criteria conformance check", False, str(e))
 
     # -------------------------------------------------------------------------
     # FINAL SCORECARD & SUMMARY

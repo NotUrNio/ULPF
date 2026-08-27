@@ -125,19 +125,17 @@ class AnomalyDetector:
         # Clamp score to [0.0, 1.0]
         score = min(1.0, round(score, 3))
 
-        # Annotate event
+        # Annotate event (pure annotation — never mutates original event block)
         if score >= _SCORE_THRESHOLD:
+            orig_sev = float(ev.get("severity_numeric") or 5.0)
+            calculated_risk = round(min(10.0, orig_sev * (1.0 + score)), 1)
             analytics_block = {
                 "anomaly_score": score,
                 "anomaly_reasons": reasons,
                 "is_anomalous": score >= 0.5,
+                "risk_score": calculated_risk,
             }
             event["analytics"] = analytics_block
-
-            # Bump severity on high-confidence anomaly
-            if score >= 0.7:
-                ev["severity_numeric"] = max(float(ev.get("severity_numeric", 5)), 9.0)
-                event["event"] = ev
 
             logger.debug(
                 "Anomaly detected: event_id=%s score=%.3f reasons=%s",

@@ -104,13 +104,15 @@ class CEFParser(BaseParser):
         fields.update(ext)
 
         # Parse known timestamp fields
-        for ts_field in ('rt', 'start', 'end', 'deviceReceiptTime'):
+        for ts_field in ('rt', 'start', 'end', 'deviceReceiptTime', 'deviceCustomDate1', 'deviceCustomDate2'):
             if ts_field in ext:
                 dt = self.parse_timestamp(ext[ts_field])
-                fields[f'{ts_field}_dt'] = dt.isoformat() if dt else None
-                break
+                if dt:
+                    fields[f'{ts_field}_dt'] = dt.isoformat()
+                    fields['timestamp_dt'] = dt.isoformat()
+                    break
         else:
-            fields['rt_dt'] = None
+            fields['timestamp_dt'] = None
 
         # Validate IPs
         for ip_field in ('src', 'dst', 'dvc'):
