@@ -189,7 +189,7 @@ def ingest(
 @click.option('--output-dir', 'output_dir', default='output',
               help='Output directory (for baseline persistence).')
 def analyze(input_path: str, output_path: str | None, output_dir: str) -> None:
-    """Run AI/ML anomaly detection over a normalized events NDJSON file."""
+    """Run statistical anomaly detection over a normalized events NDJSON file."""
     from ulpf.analytics.anomaly import AnomalyDetector
 
     detector = AnomalyDetector(output_dir=output_dir)

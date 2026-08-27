@@ -49,7 +49,7 @@ flowchart TD
         G2["composite.py: CompositeEnrichment Chain"]
     end
 
-    subgraph Analytics ["7. AI/ML Statistical Engine"]
+    subgraph Analytics ["7. Statistical Anomaly Engine"]
         H1["baseline.py: BaselineProfiler\n(Welford Rolling Means/Variances)"]
         H2["anomaly.py: AnomalyDetector\n(Z-Score >3σ, IQR Outliers, Bursts, Rare Categories)"]
     end
@@ -148,7 +148,7 @@ enrichment                    [object]   Enriched context (Air-gap safe)
   dst_ip_context              [object]   Destination IP classification
   threat_ip_detected          [boolean]  True if IP matches threat intel CIDR
 
-analytics                     [object]   AI/ML Anomaly Detection block
+analytics                     [object]   Statistical Anomaly Detection block
   anomaly_score               [number]   0.0 to 1.0 composite anomaly probability
   anomaly_reasons             [array]    Human-readable explanations for SOC triage
   is_anomalous                [boolean]  True if anomaly_score >= 0.5
