@@ -1,11 +1,49 @@
 # ULPF — Universal Log Pre-processing Framework
 
-Takes raw logs from firewalls, IDS/IPS, VPN gateways, and proxies and turns
-them into a consistent JSON schema. Supports syslog (RFC 3164 and 5424), CEF,
-Palo Alto CSV, and generic JSON out of the box. The original raw line is always
-kept on disk and linked back to the normalized event by UUID.
+[![tests](https://img.shields.io/badge/tests-53%20passed-10b981?logo=pytest&logoColor=white)](https://github.com/NotUrNio/ULPF)
+[![python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![docker](https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white)](docker/Dockerfile)
 
-No external API calls. Works offline. All deps are pip-installable from a local mirror.
+Takes raw logs from firewalls, IDS/IPS, VPN gateways, and proxies — any
+vendor, any format — and turns them into one consistent, lossless JSON
+schema for SIEM, data lake, and ML pipelines. Supports syslog (RFC 3164 and
+5424), CEF, Cisco ASA, Palo Alto CSV, and generic JSON out of the box, with
+a plugin system built to add more without touching a line of existing code.
+
+Every raw event is kept, untouched, on disk and linked back to its
+normalized form by UUID — so nothing is ever lost for forensic or compliance
+review. No external API calls, no telemetry, fully deployable air-gapped.
+
+## Why ULPF
+
+- **Zero information loss** — the exact original log line is always
+  retrievable by the event's UUID, hashed with sha256 for integrity checks.
+- **True plug-and-play parsers** — drop a new parser file into `parsers/`
+  and it self-registers via `pkgutil` discovery. No edits to core pipeline
+  code, no edits to any other file, ever.
+- **One normalized schema** — every source, regardless of vendor or format,
+  lands in the same Universal Event Schema, ready for correlation and ML.
+- **Built-in operations dashboard** — browse events, inspect raw/dead-letter
+  data, and monitor parser health, with independent Color Themes (Light/Dark)
+  and independent View Modes (Default/Professional) for SOC analysts.
+- **Air-gapped by design** — zero network calls anywhere in the default code
+  path, multi-stage Docker build that installs from local wheels only.
+- **53 tests, all green** — parser-level, end-to-end, and dashboard tests.
+
+## Architecture
+
+![ULPF architecture diagram](docs/architecture-diagram.svg)
+
+## Screenshots
+
+| Default View (Overview) | Professional View (SOC Operations) |
+|---|---|
+| ![Default View](docs/screenshots/dashboard-default.png) | ![Professional View](docs/screenshots/dashboard-professional.png) |
+
+| Traceability Forensic Split Inspector |
+|---|
+| ![Traceability Inspector](docs/screenshots/dashboard-inspector.png) |
 
 ---
 
