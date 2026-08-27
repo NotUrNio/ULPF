@@ -1012,6 +1012,51 @@
     }
   }
 
+  function switchTab(target) {
+    state.activeTab = target;
+    if (el.proTabsBar) {
+      el.proTabsBar.querySelectorAll(".pro-tab").forEach((t) => {
+        t.classList.toggle("active", t.getAttribute("data-tab") === target);
+      });
+    }
+
+    if (el.eventsPanel) el.eventsPanel.style.display = target === "events" ? "flex" : "none";
+    if (el.deadLetterPanel) el.deadLetterPanel.style.display = target === "deadletter" ? "block" : "none";
+    if (el.parsersPanel) el.parsersPanel.style.display = target === "parsers" ? "block" : "none";
+    if (el.liveHostPanel) el.liveHostPanel.style.display = target === "livehost" ? "block" : "none";
+    if (el.filterSection) el.filterSection.style.display = target === "livehost" ? "none" : "block";
+
+    if (el.quickChips) {
+      el.quickChips.querySelectorAll(".chip").forEach((c) => {
+        const f = c.getAttribute("data-filter");
+        if (target === "livehost") {
+          c.classList.toggle("active", f === "live_host");
+        } else {
+          if (f === "live_host") {
+            c.classList.remove("active");
+          } else if (f === "all" && !state.filters.action && state.filters.severityMin === null) {
+            c.classList.add("active");
+          }
+        }
+      });
+    }
+
+    if (target === "deadletter") fetchDeadLetterRecords();
+    if (target === "parsers") fetchParsersHealth();
+    if (target === "livehost") fetchHostData();
+    if (target === "events") {
+      if (virtualScroller) {
+        virtualScroller.render();
+        requestAnimationFrame(() => {
+          virtualScroller.render();
+        });
+        setTimeout(() => {
+          if (virtualScroller) virtualScroller.render();
+        }, 50);
+      }
+    }
+  }
+
   function setupLiveHostPanel() {
     const btnToggle = document.getElementById("btnToggleHostMonitor");
     const btnRefresh = document.getElementById("btnRefreshHostData");
@@ -1194,48 +1239,6 @@
       el.copyJsonBtn.textContent = "Copied!";
       setTimeout(() => (el.copyJsonBtn.textContent = "Copy JSON"), 1500);
     });
-
-    function switchTab(target) {
-      state.activeTab = target;
-      if (el.proTabsBar) {
-        el.proTabsBar.querySelectorAll(".pro-tab").forEach((t) => {
-          t.classList.toggle("active", t.getAttribute("data-tab") === target);
-        });
-      }
-
-      if (el.eventsPanel) el.eventsPanel.style.display = target === "events" ? "block" : "none";
-      if (el.deadLetterPanel) el.deadLetterPanel.style.display = target === "deadletter" ? "block" : "none";
-      if (el.parsersPanel) el.parsersPanel.style.display = target === "parsers" ? "block" : "none";
-      if (el.liveHostPanel) el.liveHostPanel.style.display = target === "livehost" ? "block" : "none";
-      if (el.filterSection) el.filterSection.style.display = target === "livehost" ? "none" : "block";
-
-      if (el.quickChips) {
-        el.quickChips.querySelectorAll(".chip").forEach((c) => {
-          const f = c.getAttribute("data-filter");
-          if (target === "livehost") {
-            c.classList.toggle("active", f === "live_host");
-          } else {
-            if (f === "live_host") {
-              c.classList.remove("active");
-            } else if (f === "all" && !state.filters.action && state.filters.severityMin === null) {
-              c.classList.add("active");
-            }
-          }
-        });
-      }
-
-      if (target === "deadletter") fetchDeadLetterRecords();
-      if (target === "parsers") fetchParsersHealth();
-      if (target === "livehost") fetchHostData();
-      if (target === "events") {
-        if (virtualScroller) {
-          virtualScroller.render();
-          requestAnimationFrame(() => {
-            virtualScroller.render();
-          });
-        }
-      }
-    }
 
     // Quick filter chips
     if (el.quickChips) {
