@@ -1,4 +1,4 @@
-# <img src="docs/ulpf-icon.svg" width="30" height="30" align="absmiddle" style="vertical-align: -6px; margin-right: 6px;" alt="ULPF App Icon" /> ULPF — Universal Log Pre-processing Framework
+# <img src="docs/ulpf-icon.svg" width="30" height="30" alt="ULPF App Icon" /> ULPF — Universal Log Pre-processing Framework
 
 [![tests](https://img.shields.io/badge/tests-124%20passed-10b981?logo=pytest&logoColor=white)](https://github.com/NotUrNio/ULPF)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
