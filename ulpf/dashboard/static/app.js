@@ -924,87 +924,99 @@
       // Render Active Connections Table
       const connsTbody = document.getElementById("hostConnectionsTableBody");
       if (connsTbody) {
-        const conns = connsRes.connections || [];
-        if (conns.length === 0) {
-          connsTbody.innerHTML = `<tr><td colspan="6" class="host-empty">No active outbound connections. Start Live Capture or open an app to inspect.</td></tr>`;
+        if (!statusRes.running) {
+          connsTbody.innerHTML = `<tr><td colspan="6" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to begin collecting and streaming active process sockets.</td></tr>`;
         } else {
-          connsTbody.innerHTML = conns
-            .map((c) => {
-              const proc = escapeHtml(c.process_name || "Unknown");
-              const pid = c.pid || "-";
-              const src = `${c.src_ip}:${c.src_port}`;
-              const dst = `${c.dst_ip}:${c.dst_port}`;
-              const proto = (c.proto || "tcp").toUpperCase();
-              return `
-                <tr>
-                  <td><strong style="color: var(--text-primary);">${proc}</strong></td>
-                  <td class="mono-text" style="color: var(--text-muted);">${pid}</td>
-                  <td class="mono-text">${escapeHtml(src)}</td>
-                  <td class="mono-text" style="color: var(--accent); font-weight: 600;">${escapeHtml(dst)}</td>
-                  <td><span class="badge badge-subtle">${proto}</span></td>
-                  <td><span class="badge badge-allow">ACTIVE</span></td>
-                </tr>
-              `;
-            })
-            .join("");
+          const conns = connsRes.connections || [];
+          if (conns.length === 0) {
+            connsTbody.innerHTML = `<tr><td colspan="6" class="host-empty">No active outbound connections. Start Live Capture or open an app to inspect.</td></tr>`;
+          } else {
+            connsTbody.innerHTML = conns
+              .map((c) => {
+                const proc = escapeHtml(c.process_name || "Unknown");
+                const pid = c.pid || "-";
+                const src = `${c.src_ip}:${c.src_port}`;
+                const dst = `${c.dst_ip}:${c.dst_port}`;
+                const proto = (c.proto || "tcp").toUpperCase();
+                return `
+                  <tr>
+                    <td><strong style="color: var(--text-primary);">${proc}</strong></td>
+                    <td class="mono-text" style="color: var(--text-muted);">${pid}</td>
+                    <td class="mono-text">${escapeHtml(src)}</td>
+                    <td class="mono-text" style="color: var(--accent); font-weight: 600;">${escapeHtml(dst)}</td>
+                    <td><span class="badge badge-subtle">${proto}</span></td>
+                    <td><span class="badge badge-allow">ACTIVE</span></td>
+                  </tr>
+                `;
+              })
+              .join("");
+          }
         }
       }
 
       // Render Host Events Table
       const eventsTbody = document.getElementById("hostEventsTableBody");
       if (eventsTbody) {
-        const evs = eventsRes.events || [];
-        if (evs.length === 0) {
-          eventsTbody.innerHTML = `<tr><td colspan="5" class="host-empty">No host events captured yet. Click "Start Live Capture" to record process executions.</td></tr>`;
+        if (!statusRes.running) {
+          eventsTbody.innerHTML = `<tr><td colspan="5" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to record process executions and terminations.</td></tr>`;
         } else {
-          eventsTbody.innerHTML = evs
-            .map((ev) => {
-              const ts = formatTimestamp(ev.timestamp);
-              const act = (ev.action || "event").toLowerCase();
-              let badge = `<span class="badge badge-unknown">${escapeHtml(act)}</span>`;
-              if (act.includes("start") || act.includes("launch")) badge = `<span class="badge badge-allow">Started</span>`;
-              else if (act.includes("stop") || act.includes("exit")) badge = `<span class="badge badge-deny">Exited</span>`;
-              else if (act.includes("permit") || act.includes("connect")) badge = `<span class="badge badge-allow">Connected</span>`;
-              else badge = `<span class="badge badge-cat-system">${escapeHtml(act)}</span>`;
+          const evs = eventsRes.events || [];
+          if (evs.length === 0) {
+            eventsTbody.innerHTML = `<tr><td colspan="5" class="host-empty">No host events captured yet. Monitoring is active.</td></tr>`;
+          } else {
+            eventsTbody.innerHTML = evs
+              .map((ev) => {
+                const ts = formatTimestamp(ev.timestamp);
+                const act = (ev.action || "event").toLowerCase();
+                let badge = `<span class="badge badge-unknown">${escapeHtml(act)}</span>`;
+                if (act.includes("start") || act.includes("launch")) badge = `<span class="badge badge-allow">Started</span>`;
+                else if (act.includes("stop") || act.includes("exit")) badge = `<span class="badge badge-deny">Exited</span>`;
+                else if (act.includes("permit") || act.includes("connect")) badge = `<span class="badge badge-allow">Connected</span>`;
+                else badge = `<span class="badge badge-cat-system">${escapeHtml(act)}</span>`;
 
-              const proc = escapeHtml(ev.process_name || "-");
-              const user = escapeHtml(ev.username || "-");
-              const msg = escapeHtml(ev.message || "-");
-              return `
-                <tr>
-                  <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${ts}</td>
-                  <td>${badge}</td>
-                  <td><strong>${proc}</strong></td>
-                  <td style="color: var(--text-secondary);">${user}</td>
-                  <td class="mono-text" style="color: var(--text-primary); font-size: 0.78rem;">${msg}</td>
-                </tr>
-              `;
-            })
-            .join("");
+                const proc = escapeHtml(ev.process_name || "-");
+                const user = escapeHtml(ev.username || "-");
+                const msg = escapeHtml(ev.message || "-");
+                return `
+                  <tr>
+                    <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${ts}</td>
+                    <td>${badge}</td>
+                    <td><strong>${proc}</strong></td>
+                    <td style="color: var(--text-secondary);">${user}</td>
+                    <td class="mono-text" style="color: var(--text-primary); font-size: 0.78rem;">${msg}</td>
+                  </tr>
+                `;
+              })
+              .join("");
+          }
         }
       }
 
       // Render Processes Snapshot Table
       const procsTbody = document.getElementById("hostProcessesTableBody");
       if (procsTbody) {
-        const procs = procsRes.processes || [];
-        if (procs.length === 0) {
-          procsTbody.innerHTML = `<tr><td colspan="3" class="host-empty">No processes returned.</td></tr>`;
+        if (!statusRes.running) {
+          procsTbody.innerHTML = `<tr><td colspan="3" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to inspect running processes.</td></tr>`;
         } else {
-          procsTbody.innerHTML = procs
-            .map((p) => {
-              const pid = p.pid || "-";
-              const name = escapeHtml(p.name || "-");
-              const path = escapeHtml(p.path || "-");
-              return `
-                <tr>
-                  <td class="mono-text" style="color: var(--text-muted); width: 80px;">${pid}</td>
-                  <td><strong style="color: var(--text-primary);">${name}</strong></td>
-                  <td class="mono-text" style="font-size: 0.75rem; color: var(--text-secondary);">${path}</td>
-                </tr>
-              `;
-            })
-            .join("");
+          const procs = procsRes.processes || [];
+          if (procs.length === 0) {
+            procsTbody.innerHTML = `<tr><td colspan="3" class="host-empty">No processes returned.</td></tr>`;
+          } else {
+            procsTbody.innerHTML = procs
+              .map((p) => {
+                const pid = p.pid || "-";
+                const name = escapeHtml(p.name || "-");
+                const path = escapeHtml(p.path || "-");
+                return `
+                  <tr>
+                    <td class="mono-text" style="color: var(--text-muted); width: 80px;">${pid}</td>
+                    <td><strong style="color: var(--text-primary);">${name}</strong></td>
+                    <td class="mono-text" style="font-size: 0.75rem; color: var(--text-secondary);">${path}</td>
+                  </tr>
+                `;
+              })
+              .join("");
+          }
         }
       }
     } catch (err) {
