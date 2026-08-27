@@ -811,12 +811,35 @@ body.resizing {
 /* Virtual Scroll Viewport */
 .virtual-viewport {
   flex: 1 1 auto;
-  overflow-y: auto;
+  overflow-y: scroll; /* always keep scrollbar track stable so it never vanishes */
   overflow-x: hidden;
   position: relative;
   height: 100%;
   min-height: 420px;
   min-width: var(--table-min-width);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) var(--bg-surface-subtle);
+}
+
+.virtual-viewport::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.virtual-viewport::-webkit-scrollbar-track {
+  background: var(--bg-surface-subtle);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.virtual-viewport::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--bg-surface-subtle);
+}
+
+.virtual-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 .virtual-spacer {

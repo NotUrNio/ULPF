@@ -207,10 +207,26 @@
           this.ticking = true;
         }
       });
+
+      // Auto-recompute on size or visibility transitions
+      if (typeof ResizeObserver !== "undefined" && this.viewport) {
+        this.resizeObserver = new ResizeObserver(() => {
+          if (this.viewport.clientHeight > 0) {
+            this.render();
+          }
+        });
+        this.resizeObserver.observe(this.viewport);
+      }
     }
 
     updateRowHeight() {
       this.rowHeight = state.viewMode === "professional" ? 38 : 46;
+    }
+
+    scrollToTop() {
+      if (this.viewport) {
+        this.viewport.scrollTop = 0;
+      }
     }
 
     render() {
@@ -232,10 +248,17 @@
         return;
       }
 
-      const scrollTop = this.viewport.scrollTop || 0;
+      let scrollTop = this.viewport.scrollTop || 0;
       const viewportHeight = this.viewport.clientHeight || 500;
 
-      const startIndex = Math.max(0, Math.floor(scrollTop / this.rowHeight) - this.buffer);
+      // Clamping guard against out-of-bounds scroll offset (e.g. after filter change or pagination)
+      const maxScroll = Math.max(0, totalHeight - viewportHeight);
+      if (scrollTop > maxScroll && maxScroll >= 0) {
+        scrollTop = maxScroll;
+        this.viewport.scrollTop = scrollTop;
+      }
+
+      const startIndex = Math.max(0, Math.min(totalRows - 1, Math.floor(scrollTop / this.rowHeight) - this.buffer));
       const endIndex = Math.min(totalRows - 1, Math.ceil((scrollTop + viewportHeight) / this.rowHeight) + this.buffer);
 
       const offsetY = startIndex * this.rowHeight;
@@ -643,8 +666,11 @@
     if (deadBadge) deadBadge.textContent = s.dead_letter_count || 0;
   }
 
-  async function fetchEvents(page = 1) {
+  async function fetchEvents(page = 1, resetScroll = true) {
     state.currentPage = page;
+    if (resetScroll && virtualScroller) {
+      virtualScroller.scrollToTop();
+    }
     const params = new URLSearchParams({
       page: state.currentPage,
       page_size: state.pageSize,
@@ -1204,6 +1230,9 @@
       if (target === "events") {
         if (virtualScroller) {
           virtualScroller.render();
+          requestAnimationFrame(() => {
+            virtualScroller.render();
+          });
         }
       }
     }
