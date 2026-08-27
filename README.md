@@ -5,9 +5,9 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![docker](https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white)](docker/Dockerfile)
 
-Takes raw logs from firewalls, IDS/IPS, VPN gateways, cloud audit logs, operating systems, and proxies — any vendor, any format — and turns them into one consistent, lossless JSON schema for SIEM, data lake, and ML pipelines. Supports **11 formats out of the box** (Syslog RFC 3164/5424, CEF, LEEF 1.0/2.0, Windows/Generic XML, Cisco ASA, Palo Alto CSV, AWS CloudTrail, Azure Monitor, GCP Audit, generic JSON), with a self-registering plugin system built to add more without touching a line of existing code.
+Takes raw logs from firewalls, IDS/IPS, VPN gateways, cloud audit logs, operating systems, and proxies — any vendor, any format — and turns them into one consistent, lossless JSON schema for SIEM, data lakes, and security analytics. Supports **11 formats out of the box** (Syslog RFC 3164/5424, CEF, LEEF 1.0/2.0, Windows/Generic XML, Cisco ASA, Palo Alto CSV, AWS CloudTrail, Azure Monitor, GCP Audit, generic JSON), with a self-registering plugin system built to add more without touching a line of existing code.
 
-Every raw event is kept, untouched, on disk and linked back to its normalized form by UUID — so nothing is ever lost for forensic or compliance review. Features offline IP & threat intelligence enrichment, an AI/ML statistical anomaly detection engine, multi-process parallel scaling, real Kafka streaming sink, and a high-performance web dashboard.
+Every raw event is kept, untouched, on disk and linked back to its normalized form by UUID — so nothing is ever lost for forensic or compliance review. Features offline IP & threat intelligence enrichment, a statistical anomaly detection engine, multi-process parallel scaling, real Kafka streaming sink, and a high-performance web dashboard.
 
 ---
 
@@ -17,7 +17,7 @@ Every raw event is kept, untouched, on disk and linked back to its normalized fo
 - **11 Out-of-the-box log parsers** — Syslog RFC 5424/3164, CEF (ArcSight), LEEF 1.0/2.0 (IBM QRadar), Windows Event Log / Generic XML, Cisco ASA, Palo Alto Networks CSV, AWS CloudTrail, Azure Monitor, GCP Cloud Audit, and JSON Passthrough.
 - **True plug-and-play parsers** — drop a new parser file into `parsers/` and it self-registers via `pkgutil` dynamic discovery. Zero edits to core pipeline code.
 - **Offline IP & threat enrichment** — pure Python, air-gap safe classification for RFC 1918 private ranges, loopback, link-local, cloud provider ASN recognition (AWS, Azure, GCP, Cloudflare, Akamai, Fastly), and embedded threat intel CIDRs.
-- **AI/ML statistical anomaly engine** — pure Python Z-Score deviation (>3σ), IQR byte-volume outlier detection, frequency burst detection (>3× baseline rate), rare category detection (<1%), and auth-failure chain tracking.
+- **Statistical anomaly detection engine** — pure Python Z-score deviation (>3σ), IQR byte-volume outlier detection, frequency burst detection (>3× baseline rate), rare category detection (<1%), and authentication failure chain tracking.
 - **Horizontal multi-process scaling** — `--workers N` worker pool (`multiprocessing.Pool`) for high-throughput enterprise scale.
 - **Production & streaming sinks** — analytics-ready NDJSON File Sink and production `KafkaProducerSink` with automatic local fallback.
 - **REST API ingestion & analytics** — `POST /api/ingest/line`, `POST /api/ingest/batch`, `POST /api/ingest/stream`, and `GET /api/analytics/anomalies`.
@@ -121,7 +121,7 @@ ulpf ingest --input /var/log/sources/ --output output/ --workers 4
 ulpf ingest --input ulpf/sample_logs/ --output output/ --sink kafka-real
 ```
 
-### AI/ML Anomaly Analysis
+### Statistical Anomaly Analysis
 
 ```bash
 # Run statistical anomaly detection over normalized events

@@ -1,4 +1,4 @@
-"""Tests for AI/ML anomaly detection engine."""
+"""Tests for statistical anomaly detection engine."""
 import json
 import pytest
 import tempfile
