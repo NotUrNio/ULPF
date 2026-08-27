@@ -237,7 +237,10 @@ ulpf list-parsers  # my_device appears automatically
 ## Tests
 
 ```bash
-# Run all 124 unit and integration tests
+# Run Master System Verification (Tests VPN, Cloud, MySQL, Windows, Live Host, SHA-256)
+python test_all.py
+
+# Run all 124 unit and integration tests via Pytest
 pytest ulpf/tests/ -v
 
 # Run with test coverage

@@ -277,6 +277,8 @@ class EventIndexer:
                     device_hostname LIKE ? OR
                     src_ip LIKE ? OR
                     dst_ip LIKE ? OR
+                    CAST(src_port AS TEXT) LIKE ? OR
+                    CAST(dst_port AS TEXT) LIKE ? OR
                     username LIKE ? OR
                     rule_name LIKE ? OR
                     action LIKE ? OR
@@ -284,7 +286,7 @@ class EventIndexer:
                     parser_name LIKE ?
                 )"""
             )
-            params.extend([search_pattern] * 11)
+            params.extend([search_pattern] * 13)
 
         if vendor:
             where_clauses.append("vendor = ?")
