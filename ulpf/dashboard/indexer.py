@@ -250,8 +250,8 @@ class EventIndexer:
         self.sync_from_ndjson()
 
         allowed_sort_fields = {
-            "ingest_timestamp": "ingest_timestamp",
-            "source_event_timestamp": "source_event_timestamp",
+            "ingest_timestamp": "COALESCE(source_event_timestamp, ingest_timestamp)",
+            "source_event_timestamp": "COALESCE(source_event_timestamp, ingest_timestamp)",
             "severity": "severity_numeric",
             "severity_numeric": "severity_numeric",
             "vendor": "vendor",
@@ -259,7 +259,6 @@ class EventIndexer:
             "action": "action",
             "outcome": "outcome",
             "src_ip": "src_ip",
-            "dst_ip": "dst_ip",
             "parser_name": "parser_name",
         }
         sort_column = allowed_sort_fields.get(sort_by, "ingest_timestamp")
