@@ -13,7 +13,7 @@ Covers:
   - Dead-Letter Quarantine & JSON Schema Validation
   - Statistical Anomaly Detection & Baseline Profiler
   - REST Ingestion APIs & Data Exports (CSV / NDJSON)
-  - Pytest Unit Test Suite (124/124 Tests)
+  - Pytest Unit Test Suite (132/132 Tests)
 """
 import io
 import json
@@ -141,33 +141,16 @@ def main():
     except Exception as e:
         record("connectivity", "Dashboard API reachable", False, str(e))
 
-    # 2. ALL 11 LOG FORMAT PARSERS ACTIVE
+    # 2. ALL 11 LOG FORMAT PARSERS REGISTERED
+    # (per-parser EVENT COUNTS are checked later, in check_parser_event_counts(),
+    #  after the ingestion sections below have actually fed each parser at
+    #  least one event — checking counts here, before any ingestion has run,
+    #  would fail every parser regardless of whether it works.)
     section_header("2. LOG PARSER REGISTRY HEALTH (11 FORMATS)")
     try:
         pdata = _get("/api/parsers")
         parsers = {p["name"]: p for p in pdata.get("parsers", [])}
         record("parsers", f"11 Parsers registered in engine ({len(parsers)} found)", len(parsers) >= 11)
-
-        expected = [
-            ("cef", "ArcSight Common Event Format"),
-            ("cisco_asa", "Cisco ASA Firewall"),
-            ("syslog_rfc5424", "Syslog RFC 5424"),
-            ("syslog_rfc3164", "Syslog RFC 3164 BSD"),
-            ("paloalto_csv", "Palo Alto Networks CSV"),
-            ("json_passthrough", "Generic JSON Passthrough"),
-            ("leef", "IBM QRadar LEEF 1.0 & 2.0"),
-            ("aws_cloudtrail", "AWS CloudTrail JSON"),
-            ("azure_monitor", "Azure Monitor / Activity Logs"),
-            ("gcp_audit", "GCP Cloud Audit protoPayload"),
-            ("xml_generic", "Windows EVTX / XML Generic"),
-        ]
-        for pname, label in expected:
-            p = parsers.get(pname)
-            if p:
-                cnt = p.get("event_count", 0)
-                record("parsers", f"Parser [{pname}] ({label}) — Active with {cnt} events", cnt >= 1)
-            else:
-                record("parsers", f"Parser [{pname}] ({label})", False, "Missing in registry")
     except Exception as e:
         record("parsers", "Parser registry check", False, str(e))
 
@@ -204,6 +187,24 @@ def main():
                    f"src_ip={v0.get('network', {}).get('src_ip')}")
     except Exception as e:
         record("vpn", "VPN query verification", False, str(e))
+
+    # 3b. STRUCTURED SYSLOG (RFC5424) & PALO ALTO TRAFFIC CSV
+    # (covers the two parsers no other section happens to exercise, so the
+    #  post-ingestion per-parser event count check in section 6b has real
+    #  coverage for all 11 registered parsers, not just 9 of them.)
+    structured_samples = [
+        ("<134>1 2026-08-27T12:30:00Z fw02.corp.example.com sshd 4521 ID99 - RFC5424 structured syslog probe",
+         "Syslog RFC5424 structured log line"),
+        ("2026-08-27T12:31:00.000+00:00,0101010101,TRAFFIC,end,0,2026-08-27 12:31:00,10.1.0.9,198.51.100.44,10.1.0.9,198.51.100.44,allow-internet,carol,,web-browsing,vsys1,trust,untrust,ethernet1/1,ethernet1/2,log-default,tcp-fin,5551,1,443,51234,0,0,0x401a,tcp,allow,2048,1024,1024,6,2026-08-27 12:31:05,3,any,0,1122334,0x0,US,US,0,3,2",
+         "Palo Alto Networks TRAFFIC CSV log line"),
+    ]
+    for raw_line, desc in structured_samples:
+        try:
+            res = _post("/api/ingest/line", {"line": raw_line})
+            ok = res.get("processed", 0) >= 1 and res.get("errors", 0) == 0
+            record("vpn", f"Ingest: {desc}", ok, str(res))
+        except Exception as e:
+            record("vpn", f"Ingest: {desc}", False, str(e))
 
     # 4. CLOUD INFRASTRUCTURE (AWS, AZURE, GCP)
     section_header("4. CLOUD INFRASTRUCTURE (AWS, AZURE, GCP)")
@@ -295,6 +296,35 @@ def main():
             record("windows", f"Ingest: {desc}", ok, str(res))
         except Exception as e:
             record("windows", f"Ingest: {desc}", False, str(e))
+
+    # 6b. PER-PARSER EVENT COUNTS — checked here (not in section 2) because it
+    # needs the ingestion sections above (3-6) to have actually run first.
+    section_header("6b. LOG PARSER EVENT COUNTS (POST-INGESTION)")
+    try:
+        pdata = _get("/api/parsers")
+        parsers_by_name = {p["name"]: p for p in pdata.get("parsers", [])}
+        expected_parsers = [
+            ("cef", "ArcSight Common Event Format"),
+            ("cisco_asa", "Cisco ASA Firewall"),
+            ("syslog_rfc5424", "Syslog RFC 5424"),
+            ("syslog_rfc3164", "Syslog RFC 3164 BSD"),
+            ("paloalto_csv", "Palo Alto Networks CSV"),
+            ("json_passthrough", "Generic JSON Passthrough"),
+            ("leef", "IBM QRadar LEEF 1.0 & 2.0"),
+            ("aws_cloudtrail", "AWS CloudTrail JSON"),
+            ("azure_monitor", "Azure Monitor / Activity Logs"),
+            ("gcp_audit", "GCP Cloud Audit protoPayload"),
+            ("xml_generic", "Windows EVTX / XML Generic"),
+        ]
+        for pname, label in expected_parsers:
+            p = parsers_by_name.get(pname)
+            if p:
+                cnt = p.get("event_count", 0)
+                record("parsers", f"Parser [{pname}] ({label}) — Active with {cnt} events", cnt >= 1)
+            else:
+                record("parsers", f"Parser [{pname}] ({label})", False, "Missing in registry")
+    except Exception as e:
+        record("parsers", "Parser event-count check", False, str(e))
 
     # 7. FORENSIC RAW STORE & CRYPTOGRAPHIC TRACEABILITY
     section_header("7. FORENSIC TRACEABILITY & SHA-256 INTEGRITY")
@@ -427,13 +457,24 @@ def main():
         # (a) Raw Byte Preservation
         from ulpf.core.raw_store import FileRawStore
         import tempfile
+        import uuid as _uuid_mod
         with tempfile.TemporaryDirectory() as td:
             rs = FileRawStore(base_dir=td)
+            bin_event_id = str(_uuid_mod.uuid4())  # raw store keys are validated as UUIDs
             bin_payload = b"CEF:0|Vendor|\xfe\xffBinary|1.0|1|Test|5|src=1.1.1.1"
-            h = rs.put("evt-bin-1", bin_payload)
-            retrieved = rs.get_bytes("evt-bin-1")
+            h = rs.put(bin_event_id, bin_payload)
+            retrieved = rs.get_bytes(bin_event_id)
             record("criteria", "(a) Raw Byte Preservation: Byte-exact storage of non-UTF8/binary payload",
                    retrieved == bin_payload and h == hashlib.sha256(bin_payload).hexdigest())
+
+            # Also confirm the store rejects non-UUID keys (path-traversal hardening)
+            try:
+                rs.put("../../../etc/passwd", b"malicious")
+                traversal_blocked = False
+            except Exception:
+                traversal_blocked = True
+            record("criteria", "(a) Raw Store: rejects non-UUID event_id (path traversal hardening)",
+                   traversal_blocked)
 
         # (b) Vendor Attributes Bag
         from ulpf.core.normalization import NormalizationEngine

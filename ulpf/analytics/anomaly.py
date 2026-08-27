@@ -108,18 +108,21 @@ class AnomalyDetector:
             threat_intel = enrichment.get("src_ip_context", {}).get("threat_intel", [])
             reasons.append(f"Threat intelligence match for {src_ip}: {threat_intel}")
 
-        # 6. Auth Failure Chain
-        if category == "authentication" and outcome == "failure":
-            fail_count = self._auth_failures.get(src_ip, 0) + 1
-            self._auth_failures[src_ip] = fail_count
-            if fail_count >= 5:
-                score += _SCORE_WEIGHTS["auth_failure_chain"]
-                reasons.append(
-                    f"Authentication failure chain: {fail_count} failures from {src_ip}"
-                )
-        else:
-            # Reset on success
-            if src_ip in self._auth_failures:
+        # 6. Auth Failure Chain — only authentication-category events touch this
+        # counter. Unrelated traffic from the same IP (the common case: a
+        # brute-forcer also generating normal packets) must NOT reset it, or
+        # the chain never accumulates. Only a *successful* auth from that IP
+        # clears it.
+        if category == "authentication":
+            if outcome == "failure":
+                fail_count = self._auth_failures.get(src_ip, 0) + 1
+                self._auth_failures[src_ip] = fail_count
+                if fail_count >= 5:
+                    score += _SCORE_WEIGHTS["auth_failure_chain"]
+                    reasons.append(
+                        f"Authentication failure chain: {fail_count} failures from {src_ip}"
+                    )
+            elif outcome == "success" and src_ip in self._auth_failures:
                 del self._auth_failures[src_ip]
 
         # Clamp score to [0.0, 1.0]

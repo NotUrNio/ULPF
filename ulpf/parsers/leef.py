@@ -60,7 +60,9 @@ def _parse_leef_attributes(attr_str: str, delimiter: str = '\t') -> dict[str, st
     return result
 
 
-_SYSLOG_PREFIX_RE = re.compile(r'^(?:<\d+>\S+\s+\S+\s+\S+\s+)?(?P<leef>LEEF:.*)$', re.DOTALL)
+# Strip optional syslog header before LEEF: — header token count varies by
+# vendor/RFC (3164 vs 5424), so match generically up to the marker itself.
+_SYSLOG_PREFIX_RE = re.compile(r'^(?:<\d+>.*?\s)?(?P<leef>LEEF:[0-9.]+\|.*)$', re.DOTALL)
 
 
 @register_parser
