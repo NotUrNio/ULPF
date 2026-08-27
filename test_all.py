@@ -76,12 +76,44 @@ def section_header(title: str):
     print(f"{'='*75}")
 
 
+def ensure_server_running():
+    """Ensure the FastAPI dashboard is online before executing API tests."""
+    try:
+        with urllib.request.urlopen(f"{BASE_URL}/api/stats", timeout=2) as r:
+            if r.status == 200:
+                return None
+    except Exception:
+        pass
+
+    print("[INFO] Dashboard server not running on port 8000. Launching local instance...")
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "ulpf.dashboard.app:app", "--host", "127.0.0.1", "--port", "8000"],
+        cwd=str(PROJECT_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    for _ in range(30):
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f"{BASE_URL}/api/stats", timeout=1) as r:
+                if r.status == 200:
+                    print("[INFO] Dashboard server online!")
+                    return proc
+        except Exception:
+            pass
+    print("[WARN] Server did not respond within 10s, continuing anyway...")
+    return proc
+
+
 def main():
     start_time = time.time()
     print("=" * 75)
     print("  ULPF MASTER TEST & VERIFICATION SUITE")
     print("  Testing: VPN, Cloud (AWS/Azure/GCP), MySQL/Databases, Firewalls, OS")
     print("=" * 75)
+
+    # Auto-start server if offline
+    server_proc = ensure_server_running()
 
     # Initial safety reset: stop live monitor if left running from prior session
     try:
