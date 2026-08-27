@@ -31,8 +31,11 @@ from ulpf.core.registry import get_all_parsers
 
 
 _ASA_RE = re.compile(r'%ASA-\d-\d+')
-_CEF_RE = re.compile(r'(?:^|<\d+>\S+\s+\S+\s+\S+\s+)CEF:\d')
-_LEEF_RE = re.compile(r'(?:^|<\d+>\S+\s+\S+\s+\S+\s+)LEEF:[0-9.]+\|')
+# Match CEF:/LEEF: markers either at the very start of the line, or immediately
+# after ANY syslog envelope (RFC3164, RFC5424, or vendor variants with a
+# different number of header tokens) — i.e. right after whitespace.
+_CEF_RE = re.compile(r'(?:^|\s)CEF:\d')
+_LEEF_RE = re.compile(r'(?:^|\s)LEEF:[0-9.]+\|')
 _RFC5424_RE = re.compile(r'^<\d+>1\s')
 _RFC3164_RE = re.compile(r'^<\d+>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s')
 _RFC3164_ALT_RE = re.compile(r'^<\d+>\d{4}-')
