@@ -79,14 +79,38 @@ STATE: dict[str, Any] = {
 }
 
 
+def _get_user_data_dir() -> Path:
+    """Get a user-writable application data directory across OS platforms."""
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "ULPF" / "output"
+        return Path.home() / ".ulpf" / "output"
+    elif sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "ULPF" / "output"
+    return Path.home() / ".local" / "share" / "ulpf" / "output"
+
+
 def _resolve_output_dir(configured_dir: str | Path | None = None) -> Path:
-    """Find valid output directory, falling back to candidate paths."""
+    """Find valid output directory, falling back to candidate paths and user data dir."""
     if configured_dir:
         p = Path(configured_dir)
-        if p.exists():
+        try:
+            p.mkdir(parents=True, exist_ok=True)
             return p
+        except (PermissionError, OSError):
+            pass
+
+    env_dir = os.environ.get("ULPF_OUTPUT_DIR", "").strip()
+    if env_dir:
+        p = Path(env_dir)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        except (PermissionError, OSError):
+            pass
+
     candidates = [
-        Path(os.environ.get("ULPF_OUTPUT_DIR", "")),
         Path("output"),
         Path("output_demo"),
         Path("output_verify"),
@@ -94,12 +118,26 @@ def _resolve_output_dir(configured_dir: str | Path | None = None) -> Path:
         Path("/app/output"),
     ]
     for c in candidates:
-        if str(c) and c.exists() and (c / "events.ndjson").exists():
-            return c
-    # Default fallback
-    p = Path(configured_dir or "output")
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+        try:
+            if str(c) and c.exists() and (c / "events.ndjson").exists():
+                return c
+        except Exception:
+            pass
+
+    # Try default relative output directory
+    try:
+        p = Path(configured_dir or "output")
+        p.mkdir(parents=True, exist_ok=True)
+        # Test write permission
+        test_file = p / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return p
+    except (PermissionError, OSError):
+        # Fallback to user-writable profile directory
+        user_dir = _get_user_data_dir()
+        user_dir.mkdir(parents=True, exist_ok=True)
+        return user_dir
 
 
 @asynccontextmanager
