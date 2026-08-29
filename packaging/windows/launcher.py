@@ -133,6 +133,7 @@ def wait_for_server(host: str, port: int, timeout: float = 10.0) -> bool:
 def launch_in_app_mode(url: str) -> bool:
     """Launch Microsoft Edge or Google Chrome in dedicated application window mode."""
     if sys.platform == "win32":
+        extra_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         edge_paths = [
             os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
             os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
@@ -146,12 +147,15 @@ def launch_in_app_mode(url: str) -> bool:
         for exe in edge_paths + chrome_paths:
             if os.path.exists(exe):
                 try:
-                    subprocess.Popen([
-                        exe,
-                        f"--app={url}",
-                        "--window-size=1360,860",
-                        "--window-position=100,50",
-                    ])
+                    subprocess.Popen(
+                        [
+                            exe,
+                            f"--app={url}",
+                            "--window-size=1360,860",
+                            "--window-position=100,50",
+                        ],
+                        creationflags=extra_flags,
+                    )
                     return True
                 except Exception:
                     pass
