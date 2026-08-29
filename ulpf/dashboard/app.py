@@ -665,6 +665,31 @@ def _find_sample_logs_dir() -> Path | None:
     return None
 
 
+def _is_ulpf_running(host: str, port: int) -> bool:
+    """Check if an instance of ULPF dashboard is already listening and responsive."""
+    import urllib.request
+    try:
+        url = f"http://{host}:{port}/api/stats"
+        req = urllib.request.Request(url, headers={"User-Agent": "ULPF-Launcher"})
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _find_available_port(host: str, start_port: int = 8000, max_attempts: int = 50) -> int:
+    """Find the first open TCP port starting from start_port."""
+    import socket
+    for p in range(start_port, start_port + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, p))
+                return p
+            except OSError:
+                continue
+    return start_port
+
+
 @click.command("ulpf-dashboard")
 @click.option(
     "--output-dir",
@@ -708,6 +733,28 @@ def main(output_dir: str | None, host: str, port: int, reload: bool, open_browse
                 click.echo(f"[+] Successfully loaded sample logs into {resolved}")
             except Exception as e:
                 click.echo(f"[!] Note: Sample log bootstrap skipped ({e})")
+
+    # 1. Check if ULPF dashboard is already running on this port
+    if _is_ulpf_running(host, port):
+        url = f"http://{host}:{port}"
+        click.echo(f"============================================================")
+        click.echo(f"  [+] ULPF Operations Dashboard is ALREADY running at: {url}")
+        click.echo(f"  Connected Output Directory: {resolved.resolve()}")
+        click.echo(f"  Opened active dashboard in your browser!")
+        click.echo(f"============================================================")
+        if open_browser:
+            webbrowser.open(url)
+        return
+
+    # 2. Check if port is occupied by another process, switch to open port automatically
+    import socket
+    original_port = port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+        except OSError:
+            port = _find_available_port(host, start_port=port + 1)
+            click.echo(f"[*] Port {original_port} is in use. Switched to available port: {port}")
 
     url = f"http://{host}:{port}"
     click.echo(f"============================================================")
