@@ -9,6 +9,17 @@
   <a href="docker/Dockerfile"><img src="https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white" alt="docker" /></a>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/FastAPI-005571?logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Apache_Kafka-231F20?logo=apachekafka&logoColor=white" alt="Apache Kafka" />
+  <img src="https://img.shields.io/badge/Apache_Parquet-56B4E9?logo=apacheparquet&logoColor=white" alt="Apache Parquet" />
+  <img src="https://img.shields.io/badge/AWS-232F3E?logo=amazonaws&logoColor=white" alt="AWS" />
+  <img src="https://img.shields.io/badge/Azure-0078D4?logo=microsoftazure&logoColor=white" alt="Azure" />
+  <img src="https://img.shields.io/badge/GCP-4285F4?logo=googlecloud&logoColor=white" alt="GCP" />
+  <img src="https://img.shields.io/badge/Cisco-1BA0D7?logo=cisco&logoColor=white" alt="Cisco" />
+</p>
+
 Takes raw logs from firewalls, IDS/IPS, VPN gateways, cloud audit logs, operating systems, and proxies — any vendor, any format — and turns them into one consistent, lossless JSON schema for SIEM, data lakes, and security analytics. Supports **11 formats out of the box** (Syslog RFC 3164/5424, CEF, LEEF 1.0/2.0, Windows/Generic XML, Cisco ASA, Palo Alto CSV, AWS CloudTrail, Azure Monitor, GCP Audit, generic JSON), with a self-registering plugin system built to add more without touching a line of existing code.
 
 Every raw event's authentic bytes are hashed and persisted **before** detection/parsing runs, and linked back to its normalized form by a deterministic UUID — so nothing is ever lost for forensic or compliance review, even a format nobody recognizes. Features live UDP/TCP syslog ingestion, offline IP & threat intelligence enrichment, a statistical anomaly detection engine, multi-process parallel scaling that actually runs, multi-sink fan-out (NDJSON/Kafka/Parquet/CEF-LEEF egress), and a high-performance web dashboard with restricted CORS and optional API-key auth.
