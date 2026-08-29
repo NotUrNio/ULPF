@@ -1,5 +1,5 @@
 """
-Generate Linux portable distribution archive (tar.gz) with desktop launcher and icons.
+Generate Linux portable distribution archive (tar.gz) with desktop launcher, deb installer, and icons.
 """
 import os
 import shutil
@@ -7,6 +7,8 @@ import sys
 import tarfile
 from pathlib import Path
 from PIL import Image
+
+VERSION = "1.2.0"
 
 def generate_linux_png_icons(icon_src: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -17,7 +19,7 @@ def generate_linux_png_icons(icon_src: Path, out_dir: Path) -> Path:
     return png_path
 
 def create_linux_bundle(root_dir: Path, dist_dir: Path) -> Path:
-    bundle_name = "ULPF-1.1.0-linux-x64-portable"
+    bundle_name = f"ULPF-{VERSION}-linux-x64-portable"
     bundle_dir = dist_dir / bundle_name
     if bundle_dir.exists():
         shutil.rmtree(bundle_dir)
@@ -33,6 +35,11 @@ def create_linux_bundle(root_dir: Path, dist_dir: Path) -> Path:
     shutil.copy2(root_dir / "packaging" / "linux" / "ulpf-dashboard.service", bundle_dir / "ulpf-dashboard.service")
     shutil.copy2(root_dir / "start_dashboard.sh", bundle_dir / "launch_dashboard.sh")
 
+    # Copy .deb if built
+    deb_files = list(dist_dir.glob("ulpf_*.deb"))
+    for d in deb_files:
+        shutil.copy2(d, bundle_dir / d.name)
+
     if (root_dir / "README.md").exists():
         shutil.copy2(root_dir / "README.md", bundle_dir / "README.md")
     if (root_dir / "LICENSE").exists():
@@ -43,7 +50,7 @@ def create_linux_bundle(root_dir: Path, dist_dir: Path) -> Path:
         shutil.copytree(root_dir / "ulpf" / "sample_logs", bundle_dir / "sample_logs", dirs_exist_ok=True)
 
     # Find wheel
-    wheels = list(dist_dir.glob("ulpf-*.whl"))
+    wheels = list(dist_dir.glob(f"ulpf-{VERSION}-*.whl"))
     for w in wheels:
         shutil.copy2(w, bundle_dir / w.name)
 

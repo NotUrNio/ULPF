@@ -5,8 +5,8 @@ Produces:
   dist/ULPF-Launcher.exe  - Dedicated Desktop App Launcher
   dist/ulpf.exe           - Full CLI + Interactive Launcher + Dashboard
   dist/ulpf-dashboard.exe - Dedicated One-Click Web Dashboard Backend
-  dist/ULPF-1.1.0-windows-x64-portable.zip - Complete portable bundle
-  dist/ULPF-1.1.0-windows-x64.msi - Windows MSI Installer
+  dist/ULPF-1.2.0-windows-x64-portable.zip - Complete portable bundle
+  dist/ULPF-1.2.0-windows-x64.msi - Windows MSI Installer
 """
 import os
 import shutil
@@ -15,10 +15,12 @@ import sys
 import zipfile
 from pathlib import Path
 
+VERSION = "1.2.0"
+
 def main():
     root_dir = Path(__file__).parent.parent.parent.resolve()
     os.chdir(root_dir)
-    print(f"=== Building ULPF Windows Applications & MSI Installer ===")
+    print(f"=== Building ULPF Windows Applications & MSI Installer v{VERSION} ===")
     print(f"Root directory: {root_dir}")
 
     # 1. Generate icon if needed
@@ -29,30 +31,27 @@ def main():
     else:
         print(f"[1/5] Found Windows application icon at {icon_path.name}")
 
-    # 2. Run PyInstaller
-    print("[2/5] Compiling standalone executables with PyInstaller...")
-    spec_path = root_dir / "packaging" / "windows" / "ulpf.spec"
-    cmd = [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        str(spec_path),
-        "--noconfirm",
-        "--clean",
-    ]
-    res = subprocess.run(cmd)
-    if res.returncode != 0:
-        print("[ERROR] PyInstaller build failed!")
-        sys.exit(res.returncode)
-
+    # 2. PyInstaller verification / build
     dist_dir = root_dir / "dist"
     launcher_exe = dist_dir / "ULPF-Launcher.exe"
     ulpf_exe = dist_dir / "ulpf.exe"
     dash_exe = dist_dir / "ulpf-dashboard.exe"
 
-    if not launcher_exe.exists() or not ulpf_exe.exists() or not dash_exe.exists():
-        print("[ERROR] Expected output executables not found in dist/")
-        sys.exit(1)
+    if not (launcher_exe.exists() and ulpf_exe.exists() and dash_exe.exists()):
+        print("[2/5] Compiling standalone executables with PyInstaller...")
+        spec_path = root_dir / "packaging" / "windows" / "ulpf.spec"
+        cmd = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            str(spec_path),
+            "--noconfirm",
+            "--clean",
+        ]
+        res = subprocess.run(cmd)
+        if res.returncode != 0:
+            print("[ERROR] PyInstaller build failed!")
+            sys.exit(res.returncode)
 
     print(f"[3/5] Standalone Executables Verified:")
     print(f"      - {launcher_exe.name} ({launcher_exe.stat().st_size / (1024*1024):.2f} MB)")
@@ -61,7 +60,7 @@ def main():
 
     # 3. Create Release Portable Zip Bundle
     print("[4/5] Creating portable distribution archive...")
-    bundle_name = "ULPF-1.1.0-windows-x64-portable"
+    bundle_name = f"ULPF-{VERSION}-windows-x64-portable"
     bundle_dir = dist_dir / bundle_name
     if bundle_dir.exists():
         shutil.rmtree(bundle_dir)
@@ -106,11 +105,11 @@ def main():
     # 4. Build MSI Installer
     print("[5/5] Compiling Windows MSI Installer package...")
     msi_script = root_dir / "packaging" / "windows" / "build_msi.ps1"
-    msi_res = subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", str(msi_script)])
+    msi_res = subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", str(msi_script), "-Version", VERSION])
     if msi_res.returncode != 0:
         print("[!] Note: MSI compilation returned non-zero. Check WiX logs above.")
 
-    msi_out = dist_dir / "ULPF-1.1.0-windows-x64.msi"
+    msi_out = dist_dir / f"ULPF-{VERSION}-windows-x64.msi"
     print(f"\n============================================================")
     print(f"  WINDOWS PACKAGING COMPLETE!")
     print(f"  Desktop App Launcher Exe:   {launcher_exe}")

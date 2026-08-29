@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Universal Log Pre-processing Framework (ULPF)"
            Manufacturer="NotUrNio"
-           Version="1.1.0.0"
+           Version="1.2.0.0"
            UpgradeCode="4C5E8D2A-7F1B-4A9E-8B3C-1D5E9F7A2B4C"
            Scope="perMachine">
 
