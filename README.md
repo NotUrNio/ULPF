@@ -1,9 +1,13 @@
-# <img src="docs/ulpf-icon.svg" width="30" height="30" alt="ULPF App Icon" /> ULPF — Universal Log Pre-processing Framework
+<p align="center">
+  <img src="docs/ulpf-banner.svg" width="560" alt="ULPF Banner" />
+</p>
 
-[![tests](https://img.shields.io/badge/tests-132%20passed-10b981?logo=pytest&logoColor=white)](https://github.com/NotUrNio/ULPF)
-[![python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![docker](https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white)](docker/Dockerfile)
+<p align="center">
+  <a href="https://github.com/NotUrNio/ULPF"><img src="https://img.shields.io/badge/tests-132%20passed-10b981?logo=pytest&logoColor=white" alt="tests" /></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white" alt="python" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
+  <a href="docker/Dockerfile"><img src="https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white" alt="docker" /></a>
+</p>
 
 Takes raw logs from firewalls, IDS/IPS, VPN gateways, cloud audit logs, operating systems, and proxies — any vendor, any format — and turns them into one consistent, lossless JSON schema for SIEM, data lakes, and security analytics. Supports **11 formats out of the box** (Syslog RFC 3164/5424, CEF, LEEF 1.0/2.0, Windows/Generic XML, Cisco ASA, Palo Alto CSV, AWS CloudTrail, Azure Monitor, GCP Audit, generic JSON), with a self-registering plugin system built to add more without touching a line of existing code.
 
