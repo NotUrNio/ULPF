@@ -2,6 +2,7 @@
 ULPF Native Desktop Application Launcher.
 Launches the embedded FastAPI backend and presents a dedicated native desktop GUI window.
 """
+import io
 import os
 import sys
 import time
@@ -10,6 +11,24 @@ import threading
 import subprocess
 import webbrowser
 from pathlib import Path
+
+# Safe Null stream for GUI windowed executables (where sys.stdout/stderr are None)
+class SafeStream:
+    def write(self, text):
+        pass
+    def flush(self):
+        pass
+    def isatty(self):
+        return False
+    def fileno(self):
+        raise io.UnsupportedOperation("No fileno in GUI mode")
+
+if sys.stdout is None:
+    sys.stdout = SafeStream()
+if sys.stderr is None:
+    sys.stderr = SafeStream()
+if sys.stdin is None:
+    sys.stdin = io.StringIO()
 
 # Fix Windows high DPI scaling
 if sys.platform == "win32":
@@ -28,6 +47,19 @@ from ulpf.dashboard.app import create_app, _resolve_output_dir
 from ulpf.core.ingestion import FileReader
 from ulpf.cli import _build_pipeline, _find_schema_dir, _find_config_dir
 import uvicorn
+
+
+def get_user_log_path() -> Path:
+    """Get a user-writable crash/debug log path across OS platforms."""
+    if sys.platform == "win32":
+        app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP")
+        if app_data:
+            p = Path(app_data) / "ULPF"
+            p.mkdir(parents=True, exist_ok=True)
+            return p / "ulpf_launcher.log"
+    p = Path.home() / ".ulpf"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "ulpf_launcher.log"
 
 
 def find_available_port(host: str = "127.0.0.1", start_port: int = 8000) -> int:
@@ -63,11 +95,11 @@ def find_sample_logs_dir() -> Path | None:
 
 def bootstrap_sample_data_if_needed(output_dir: Path) -> None:
     """Initialize demo events if database is empty on first launch."""
-    events_file = output_dir / "events.ndjson"
-    if not events_file.exists() or events_file.stat().st_size == 0:
-        sample_dir = find_sample_logs_dir()
-        if sample_dir and sample_dir.exists():
-            try:
+    try:
+        events_file = output_dir / "events.ndjson"
+        if not events_file.exists() or events_file.stat().st_size == 0:
+            sample_dir = find_sample_logs_dir()
+            if sample_dir and sample_dir.exists():
                 output_dir.mkdir(parents=True, exist_ok=True)
                 p, s, v = _build_pipeline(
                     output=output_dir,
@@ -81,8 +113,10 @@ def bootstrap_sample_data_if_needed(output_dir: Path) -> None:
                 v.close()
                 for snk in s:
                     snk.close()
-            except Exception as e:
-                print(f"[!] Sample data note: {e}")
+    except Exception as e:
+        log_path = get_user_log_path()
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{time.ctime()}] Bootstrap notice: {e}\n")
 
 
 def wait_for_server(host: str, port: int, timeout: float = 10.0) -> bool:
@@ -131,9 +165,15 @@ def main():
 
     bootstrap_sample_data_if_needed(output_dir)
 
-    # Start FastAPI server in background thread
+    # Start FastAPI server in background thread with log_config=None to prevent isatty error
     app = create_app(output_dir=output_dir, host=host, port=port)
-    config = uvicorn.Config(app=app, host=host, port=port, log_level="warning", access_log=False)
+    config = uvicorn.Config(
+        app=app,
+        host=host,
+        port=port,
+        log_config=None,
+        access_log=False,
+    )
     server = uvicorn.Server(config=config)
 
     server_thread = threading.Thread(target=server.run, daemon=True)
@@ -157,7 +197,9 @@ def main():
         webview.start()
         gui_launched = True
     except Exception as e:
-        print(f"[!] PyWebView notice: {e}")
+        log_path = get_user_log_path()
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{time.ctime()}] PyWebView notice: {e}\n")
 
     # 2. Fallback: Edge/Chrome dedicated app window or browser
     if not gui_launched:
@@ -175,9 +217,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Write crash log in current directory so it's always diagnosable
-        crash_log = Path.cwd() / "ulpf_crash.log"
+        crash_log = get_user_log_path()
         with open(crash_log, "a", encoding="utf-8") as f:
-            f.write(f"[{time.ctime()}] Error: {e}\n")
+            f.write(f"[{time.ctime()}] Launcher Unhandled Error: {e}\n")
             import traceback
             traceback.print_exc(file=f)
