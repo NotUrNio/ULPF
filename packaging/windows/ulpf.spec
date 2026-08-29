@@ -33,7 +33,12 @@ hiddenimports = [
     "dateutil",
     "dateutil.parser",
     "sqlite3",
-] + collect_submodules("ulpf")
+    "webview",
+    "webview.guilib",
+    "webview.platforms",
+    "webview.platforms.winforms",
+    "webview.platforms.edgechromium",
+] + collect_submodules("ulpf") + collect_submodules("webview")
 
 datas = [
     (str(root_dir / "ulpf" / "schemas"), "ulpf/schemas"),
@@ -167,7 +172,7 @@ exe_launcher = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,

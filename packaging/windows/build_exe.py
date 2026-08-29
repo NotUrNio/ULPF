@@ -31,27 +31,26 @@ def main():
     else:
         print(f"[1/5] Found Windows application icon at {icon_path.name}")
 
-    # 2. PyInstaller verification / build
+    # 2. PyInstaller build
     dist_dir = root_dir / "dist"
+    print("[2/5] Compiling standalone windowed executables with PyInstaller...")
+    spec_path = root_dir / "packaging" / "windows" / "ulpf.spec"
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        str(spec_path),
+        "--noconfirm",
+        "--clean",
+    ]
+    res = subprocess.run(cmd)
+    if res.returncode != 0:
+        print("[ERROR] PyInstaller build failed!")
+        sys.exit(res.returncode)
+
     launcher_exe = dist_dir / "ULPF-Launcher.exe"
     ulpf_exe = dist_dir / "ulpf.exe"
     dash_exe = dist_dir / "ulpf-dashboard.exe"
-
-    if not (launcher_exe.exists() and ulpf_exe.exists() and dash_exe.exists()):
-        print("[2/5] Compiling standalone executables with PyInstaller...")
-        spec_path = root_dir / "packaging" / "windows" / "ulpf.spec"
-        cmd = [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            str(spec_path),
-            "--noconfirm",
-            "--clean",
-        ]
-        res = subprocess.run(cmd)
-        if res.returncode != 0:
-            print("[ERROR] PyInstaller build failed!")
-            sys.exit(res.returncode)
 
     print(f"[3/5] Standalone Executables Verified:")
     print(f"      - {launcher_exe.name} ({launcher_exe.stat().st_size / (1024*1024):.2f} MB)")
