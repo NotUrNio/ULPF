@@ -899,36 +899,98 @@
   }
 
   // --------------------------------------------------------------------------
-  // Live SSE Streaming
+  // Live SSE Streaming & Real-Time Broadcast Dispatcher
   // --------------------------------------------------------------------------
+  let sseReconnectTimer = null;
+
   function setupSSE() {
     const liveBadge = document.getElementById("liveStreamBadge");
     if (!window.EventSource) return;
 
+    if (state.sseEventSource) {
+      try { state.sseEventSource.close(); } catch (e) {}
+      state.sseEventSource = null;
+    }
+
     const source = new EventSource("/api/stream");
+    state.sseEventSource = source;
 
     source.onopen = () => {
       state.sseConnected = true;
-      if (liveBadge) liveBadge.style.display = "inline-flex";
+      state.sseReconnectAttempts = 0;
+      if (liveBadge) {
+        liveBadge.style.display = "inline-flex";
+        liveBadge.innerHTML = `<span class="pulse-dot"></span> Stream Live`;
+        liveBadge.style.borderColor = "rgba(16, 185, 129, 0.4)";
+      }
     };
 
     source.onmessage = (e) => {
       try {
-        const newEvent = JSON.parse(e.data);
-        // Prepend to list if on page 1 without search filter
-        if (state.currentPage === 1 && !state.filters.search) {
-          state.events.unshift(newEvent);
-          state.totalEvents += 1;
-          virtualScroller.render();
-          renderPagination();
+        const payload = JSON.parse(e.data);
+
+        // 1. Live Connection Telemetry update
+        if (payload && payload.type === "connection_update") {
+          handleConnectionUpdate(payload.data);
+          return;
         }
-        fetchStats();
+
+        // 2. Source Health & Metrics update
+        if (payload && payload.type === "source_health_update") {
+          handleSourceHealthUpdate(payload.data);
+          return;
+        }
+
+        // 3. Top Metrics update
+        if (payload && payload.type === "metrics_update") {
+          if (payload.data) {
+            const s = payload.data;
+            const totalEl = document.getElementById("statTotalEvents");
+            const blockedEl = document.getElementById("statBlockedEvents");
+            const highSevEl = document.getElementById("statHighSeverity");
+            const velocityEl = document.getElementById("statVelocity");
+            if (totalEl) totalEl.textContent = (s.total_events || 0).toLocaleString();
+            if (blockedEl) blockedEl.textContent = (s.blocked_events || 0).toLocaleString();
+            if (highSevEl) highSevEl.textContent = (s.high_severity_events || 0).toLocaleString();
+            if (velocityEl) velocityEl.textContent = `${s.events_last_1h || 0} / hr`;
+            const deadBadge = document.getElementById("tabDeadLetterBadge");
+            if (deadBadge) deadBadge.textContent = s.dead_letter_count || 0;
+          }
+          return;
+        }
+
+        // 4. Ingested Event (either payload.data or raw event object)
+        const newEvent = (payload && payload.type === "event_ingested") ? payload.data : payload;
+        if (newEvent && (newEvent.event_id || newEvent.schema_version)) {
+          if (state.currentPage === 1 && !state.filters.search) {
+            state.events.unshift(newEvent);
+            state.totalEvents += 1;
+            if (virtualScroller) virtualScroller.render();
+            renderPagination();
+          }
+          fetchStats();
+        }
       } catch (err) {}
     };
 
     source.onerror = () => {
       state.sseConnected = false;
-      if (liveBadge) liveBadge.style.display = "none";
+      if (liveBadge) {
+        liveBadge.style.display = "inline-flex";
+        liveBadge.innerHTML = `<span class="pulse-dot" style="background: #f59e0b;"></span> Reconnecting...`;
+        liveBadge.style.borderColor = "rgba(245, 158, 11, 0.4)";
+      }
+      try { source.close(); } catch (e) {}
+
+      // Auto-reconnect with exponential backoff (1s, 1.5s, 2.25s, max 10s)
+      if (!sseReconnectTimer) {
+        state.sseReconnectAttempts = (state.sseReconnectAttempts || 0) + 1;
+        const delay = Math.min(10000, 1000 * Math.pow(1.5, Math.min(state.sseReconnectAttempts, 6)));
+        sseReconnectTimer = setTimeout(() => {
+          sseReconnectTimer = null;
+          setupSSE();
+        }, delay);
+      }
     };
   }
 
@@ -944,13 +1006,16 @@
     }
 
     const sourcesPanel = document.getElementById("tabContentSources");
+    const connectionsPanel = document.getElementById("tabContentConnections");
     if (sourcesPanel) sourcesPanel.style.display = target === "sources" ? "block" : "none";
+    if (connectionsPanel) connectionsPanel.style.display = target === "connections" ? "block" : "none";
     if (el.eventsPanel) el.eventsPanel.style.display = target === "events" ? "flex" : "none";
     if (el.deadLetterPanel) el.deadLetterPanel.style.display = target === "deadletter" ? "block" : "none";
     if (el.parsersPanel) el.parsersPanel.style.display = target === "parsers" ? "block" : "none";
-    if (el.filterSection) el.filterSection.style.display = (target === "sources") ? "none" : "block";
+    if (el.filterSection) el.filterSection.style.display = (target === "sources" || target === "connections") ? "none" : "block";
 
     if (target === "sources") fetchSources();
+    if (target === "connections") fetchConnections();
     if (target === "deadletter") fetchDeadLetterRecords();
     if (target === "parsers") fetchParsersHealth();
     if (target === "events") {
@@ -967,100 +1032,334 @@
   }
 
   // --------------------------------------------------------------------------
+  // Live Socket Connections Management
+  // --------------------------------------------------------------------------
+  function handleConnectionUpdate(data) {
+    if (!data) return;
+    const conns = data.connections || [];
+    const stats = data.stats || {};
+    state.connections = conns;
+    state.liveMonitorRunning = !!stats.running;
+    state.liveMonitorStats = stats;
+
+    // Update connection badge on tab
+    const badge = document.getElementById("tabConnectionsBadge");
+    if (badge) {
+      badge.textContent = conns.length;
+      badge.style.display = conns.length > 0 ? "inline-block" : "none";
+    }
+
+    // Update Connection Metrics
+    const totalEl = document.getElementById("connStatTotal");
+    const dbEl = document.getElementById("connStatDB");
+    const remoteEl = document.getElementById("connStatRemote");
+    const lastScanEl = document.getElementById("connStatLastScan");
+
+    const dbConns = conns.filter((c) => {
+      const p = c.dst_port || c.src_port;
+      const svc = (c.service_inferred || "").toLowerCase();
+      return [3306, 5432, 1433, 1521, 27017, 6379].includes(p) || svc.includes("mysql") || svc.includes("database") || svc.includes("postgres") || svc.includes("redis");
+    });
+    const remoteConns = conns.filter((c) => !c.is_localhost);
+
+    if (totalEl) totalEl.textContent = conns.length;
+    if (dbEl) dbEl.textContent = dbConns.length;
+    if (remoteEl) remoteEl.textContent = remoteConns.length;
+    if (lastScanEl) {
+      lastScanEl.textContent = stats.last_scan_time ? formatTimestamp(stats.last_scan_time) : (conns.length > 0 ? "Live" : "--");
+    }
+
+    // Update control button and alert banner
+    updateLiveMonitorControls(stats);
+
+    // If active tab is connections, re-render table
+    if (state.activeTab === "connections") {
+      renderConnectionsTable();
+    }
+  }
+
+  function updateLiveMonitorControls(stats) {
+    const btn = document.getElementById("btnToggleLiveMonitor");
+    const statusText = document.getElementById("connStreamStatusText");
+    const alertBox = document.getElementById("connPermissionAlert");
+    const alertText = document.getElementById("connPermissionAlertText");
+
+    const isRunning = !!(stats && stats.running);
+    const permError = stats && stats.permission_error;
+
+    if (btn) {
+      if (isRunning) {
+        btn.textContent = "⏹ Stop Live Monitor";
+        btn.style.background = "var(--color-danger)";
+        btn.style.borderColor = "var(--color-danger)";
+      } else {
+        btn.textContent = "▶ Start Live Monitor";
+        btn.style.background = "var(--color-success)";
+        btn.style.borderColor = "var(--color-success)";
+      }
+    }
+
+    if (statusText) {
+      statusText.textContent = isRunning ? "Active Monitoring" : "Monitor Inactive";
+    }
+
+    if (alertBox && alertText) {
+      if (permError) {
+        alertText.textContent = permError;
+        alertBox.style.display = "flex";
+      } else {
+        alertBox.style.display = "none";
+      }
+    }
+  }
+
+  async function fetchConnections() {
+    try {
+      const res = await fetch("/api/live-monitor/connections");
+      if (!res.ok) return;
+      const data = await res.json();
+      handleConnectionUpdate(data);
+    } catch (e) {
+      console.warn("fetchConnections error:", e);
+    }
+  }
+
+  function renderConnectionsTable() {
+    const tbody = document.getElementById("connectionsTableBody");
+    if (!tbody) return;
+
+    if (!state.liveMonitorRunning && (!state.connections || state.connections.length === 0)) {
+      tbody.innerHTML = `<tr><td colspan="8" class="host-empty">Live Socket Monitor is inactive. Click "Start Live Monitor" above to begin real-time socket inspection.</td></tr>`;
+      return;
+    }
+
+    let list = state.connections || [];
+    const filter = (state.connFilters && state.connFilters.filter) ? state.connFilters.filter : "all";
+    const search = (state.connFilters && state.connFilters.search ? state.connFilters.search : "").toLowerCase();
+
+    if (filter === "db") {
+      list = list.filter((c) => {
+        const p = c.dst_port || c.src_port;
+        const svc = (c.service_inferred || "").toLowerCase();
+        return [3306, 5432, 1433, 1521, 27017, 6379].includes(p) || svc.includes("mysql") || svc.includes("database") || svc.includes("postgres") || svc.includes("redis");
+      });
+    } else if (filter === "remote") {
+      list = list.filter((c) => !c.is_localhost);
+    } else if (filter === "localhost") {
+      list = list.filter((c) => c.is_localhost);
+    }
+
+    if (search) {
+      list = list.filter((c) => {
+        const str = `${c.pid} ${c.process_name} ${c.src_ip} ${c.src_port} ${c.dst_ip} ${c.dst_port} ${c.service_inferred} ${c.state}`.toLowerCase();
+        return str.includes(search);
+      });
+    }
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="host-empty">No socket connections matching current filters.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list
+      .map((c) => {
+        const isLocal = !!c.is_localhost;
+        const scopeBadge = isLocal
+          ? `<span class="badge badge-subtle" style="font-size: 0.72rem;">Localhost</span>`
+          : `<span class="badge badge-allow" style="font-size: 0.72rem;">Remote</span>`;
+
+        const isDB = (c.service_inferred || "").toLowerCase().includes("mysql") ||
+                     (c.service_inferred || "").toLowerCase().includes("database") ||
+                     [3306, 5432, 1433, 1521, 27017, 6379].includes(c.dst_port) ||
+                     [3306, 5432, 1433, 1521, 27017, 6379].includes(c.src_port);
+
+        const svcBadge = isDB
+          ? `<span class="badge badge-cat-network" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); font-weight: 600;">🗄 ${escapeHtml(c.service_inferred || "Database")}</span>`
+          : `<span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(c.service_inferred || "TCP Socket")}</span>`;
+
+        const stateColor = (c.state === "ESTABLISHED" || c.state === "5") ? "var(--color-success)" : "var(--text-muted)";
+        const stateHtml = `<span class="mono-text" style="font-size: 0.75rem; color: ${stateColor}; font-weight: 600;">${escapeHtml(c.state || "ESTABLISHED")}</span>`;
+
+        const pName = c.process_name || "system";
+        const pPath = c.process_path ? ` title="${escapeHtml(c.process_path)}"` : "";
+
+        return `
+          <tr>
+            <td>
+              <strong style="color: var(--text-primary); font-size: 0.85rem;"${pPath}>${escapeHtml(pName)}</strong>
+              <span class="mono-text" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;">(${c.pid})</span>
+            </td>
+            <td><span class="badge badge-subtle" style="font-size: 0.72rem; font-weight: 600;">${(c.proto || "TCP").toUpperCase()}</span></td>
+            <td class="mono-text" style="font-size: 0.8rem;">${escapeHtml(c.src_ip)}:${c.src_port}</td>
+            <td style="color: var(--text-muted); text-align: center;">→</td>
+            <td class="mono-text" style="font-size: 0.8rem; font-weight: 600;">${escapeHtml(c.dst_ip)}:${c.dst_port}</td>
+            <td>${svcBadge}</td>
+            <td>${stateHtml}</td>
+            <td>${scopeBadge}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function setupConnectionsPanel() {
+    const toggleBtn = document.getElementById("btnToggleLiveMonitor");
+    const refreshBtn = document.getElementById("btnRefreshConnections");
+    const chips = document.getElementById("connFilterChips");
+    const searchInp = document.getElementById("connSearchInput");
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", async () => {
+        const isRunning = state.liveMonitorRunning;
+        const endpoint = isRunning ? "/api/live-monitor/stop" : "/api/live-monitor/start";
+        toggleBtn.disabled = true;
+        try {
+          const res = await fetch(endpoint, { method: "POST" });
+          if (res.ok) {
+            const data = await res.json();
+            handleConnectionUpdate(data);
+          }
+        } catch (e) {
+          console.warn("Toggle live monitor error:", e);
+        } finally {
+          toggleBtn.disabled = false;
+        }
+      });
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => fetchConnections());
+    }
+
+    if (chips) {
+      chips.querySelectorAll(".chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          chips.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+          chip.classList.add("active");
+          state.connFilters = state.connFilters || {};
+          state.connFilters.filter = chip.getAttribute("data-conn-filter") || "all";
+          renderConnectionsTable();
+        });
+      });
+    }
+
+    if (searchInp) {
+      searchInp.addEventListener(
+        "input",
+        debounce((e) => {
+          state.connFilters = state.connFilters || {};
+          state.connFilters.search = e.target.value;
+          renderConnectionsTable();
+        }, 150)
+      );
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Sources & Declarative Onboarding Engine
   // --------------------------------------------------------------------------
+  function handleSourceHealthUpdate(data) {
+    if (!data) return;
+    state.sources = data.sources || [];
+    state.sourceMetrics = data.metrics || {};
+    if (state.activeTab === "sources") {
+      renderSourcesTable(state.sources, state.sourceMetrics);
+    }
+  }
+
   async function fetchSources() {
     try {
       const res = await fetch("/api/sources");
       if (!res.ok) return;
       const data = await res.json();
-      const sources = data.sources || [];
-      const metrics = data.metrics || {};
-
-      const activeEl = document.getElementById("srcStatActive");
-      const epsEl = document.getElementById("srcStatEPS");
-      const valEl = document.getElementById("srcStatValidity");
-      const dlqEl = document.getElementById("srcStatDLQ");
-      const tbody = document.getElementById("sourcesTableBody");
-
-      if (activeEl) activeEl.textContent = `${metrics.active_sources || 0} / ${metrics.total_sources_registered || 0}`;
-      if (epsEl) epsEl.textContent = `${(metrics.total_events || 0).toLocaleString()} events`;
-      if (valEl) valEl.textContent = `${metrics.validity_rate_pct || 100}%`;
-      if (dlqEl) dlqEl.textContent = (metrics.total_dead_letter || 0).toLocaleString();
-
-      if (tbody) {
-        if (sources.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" class="host-empty">No log sources registered yet.</td></tr>`;
-        } else {
-          tbody.innerHTML = sources
-            .map((s) => {
-              const isEnabled = s.enabled === 1;
-              const statusBadge = isEnabled
-                ? `<span class="badge badge-allow">ACTIVE</span>`
-                : `<span class="badge badge-subtle">DISABLED</span>`;
-              
-              let healthBadge = `<span class="badge badge-allow">● Healthy</span>`;
-              if (s.health_state === "warning" || s.dead_letter_count > 0) {
-                healthBadge = `<span class="badge badge-cat-threat" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">● Warning (${s.dead_letter_count} DLQ)</span>`;
-              } else if (s.health_state === "error") {
-                healthBadge = `<span class="badge badge-deny">● Error</span>`;
-              }
-
-              const typeBadge = s.source_type === "declarative"
-                ? `<span class="badge badge-cat-system" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">No-Code (${escapeHtml(s.input_type || "YAML")})</span>`
-                : `<span class="badge badge-subtle">Built-in (${escapeHtml(s.input_type || "plugin")})</span>`;
-
-              const lastEvent = s.last_event_at ? formatTimestamp(s.last_event_at) : "Never";
-
-              return `
-                <tr>
-                  <td>
-                    <strong style="color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(s.name || s.source_id)}</strong>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(s.vendor || "")} / ${escapeHtml(s.product || "")}</div>
-                  </td>
-                  <td>${typeBadge}</td>
-                  <td>${healthBadge}</td>
-                  <td class="mono-text" style="font-weight: 600;">${(s.events_processed || 0).toLocaleString()}</td>
-                  <td>${statusBadge}</td>
-                  <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${lastEvent}</td>
-                  <td>
-                    <div style="display: flex; gap: 6px;">
-                      <button class="pagination-btn btn-toggle-src" data-id="${escapeHtml(s.source_id)}" data-enabled="${isEnabled ? '1' : '0'}" style="padding: 2px 8px; font-size: 0.75rem;">
-                        ${isEnabled ? 'Disable' : 'Enable'}
-                      </button>
-                      ${s.source_type === 'declarative' ? `<button class="pagination-btn btn-del-src" data-id="${escapeHtml(s.source_id)}" style="padding: 2px 8px; font-size: 0.75rem; color: var(--color-danger);">Delete</button>` : ''}
-                    </div>
-                  </td>
-                </tr>
-              `;
-            })
-            .join("");
-
-          // Attach action listeners
-          tbody.querySelectorAll(".btn-toggle-src").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              const sId = btn.getAttribute("data-id");
-              const isEn = btn.getAttribute("data-enabled") === "1";
-              const endpoint = isEn ? `/api/sources/${sId}/disable` : `/api/sources/${sId}/enable`;
-              await fetch(endpoint, { method: "POST" });
-              fetchSources();
-            });
-          });
-
-          tbody.querySelectorAll(".btn-del-src").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              const sId = btn.getAttribute("data-id");
-              if (confirm(`Delete declarative source '${sId}'?`)) {
-                await fetch(`/api/sources/${sId}`, { method: "DELETE" });
-                fetchSources();
-              }
-            });
-          });
-        }
-      }
+      handleSourceHealthUpdate(data);
     } catch (err) {
-      console.error("Failed to load sources:", err);
+      console.warn("fetchSources error:", err);
     }
+  }
+
+  function renderSourcesTable(sources, metrics) {
+    const activeEl = document.getElementById("srcStatActive");
+    const epsEl = document.getElementById("srcStatEPS");
+    const valEl = document.getElementById("srcStatValidity");
+    const dlqEl = document.getElementById("srcStatDLQ");
+    const tbody = document.getElementById("sourcesTableBody");
+
+    if (activeEl) activeEl.textContent = `${metrics.active_sources || 0} / ${metrics.total_sources_registered || 0}`;
+    if (epsEl) epsEl.textContent = `${(metrics.total_events || 0).toLocaleString()} events`;
+    if (valEl) valEl.textContent = `${metrics.validity_rate_pct || 100}%`;
+    if (dlqEl) dlqEl.textContent = (metrics.total_dead_letter || 0).toLocaleString();
+
+    if (!tbody) return;
+    if (!sources || sources.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="host-empty">No log sources registered yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = sources
+      .map((s) => {
+        const isEnabled = s.enabled === 1;
+        const statusBadge = isEnabled
+          ? `<span class="badge badge-allow">ACTIVE</span>`
+          : `<span class="badge badge-subtle">DISABLED</span>`;
+        
+        let healthBadge = `<span class="badge badge-allow">● Healthy</span>`;
+        if (s.health_state === "warning" || s.dead_letter_count > 0) {
+          healthBadge = `<span class="badge badge-cat-threat" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">● Warning (${s.dead_letter_count} DLQ)</span>`;
+        } else if (s.health_state === "error") {
+          healthBadge = `<span class="badge badge-deny">● Error</span>`;
+        }
+
+        const typeBadge = s.source_type === "declarative"
+          ? `<span class="badge badge-cat-system" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">No-Code (${escapeHtml(s.input_type || "YAML")})</span>`
+          : `<span class="badge badge-subtle">Built-in (${escapeHtml(s.input_type || "plugin")})</span>`;
+
+        const lastEvent = s.last_event_at ? formatTimestamp(s.last_event_at) : "Never";
+
+        return `
+          <tr>
+            <td>
+              <strong style="color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(s.name || s.source_id)}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(s.vendor || "")} / ${escapeHtml(s.product || "")}</div>
+            </td>
+            <td>${typeBadge}</td>
+            <td>${healthBadge}</td>
+            <td class="mono-text" style="font-weight: 600;">${(s.events_processed || 0).toLocaleString()}</td>
+            <td>${statusBadge}</td>
+            <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${lastEvent}</td>
+            <td>
+              <div style="display: flex; gap: 6px;">
+                <button class="pagination-btn btn-toggle-src" data-id="${escapeHtml(s.source_id)}" data-enabled="${isEnabled ? '1' : '0'}" style="padding: 2px 8px; font-size: 0.75rem;">
+                  ${isEnabled ? 'Disable' : 'Enable'}
+                </button>
+                ${s.source_type === 'declarative' ? `<button class="pagination-btn btn-del-src" data-id="${escapeHtml(s.source_id)}" style="padding: 2px 8px; font-size: 0.75rem; color: var(--color-danger);">Delete</button>` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    // Attach action listeners
+    tbody.querySelectorAll(".btn-toggle-src").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const sId = btn.getAttribute("data-id");
+        const isEn = btn.getAttribute("data-enabled") === "1";
+        const endpoint = isEn ? `/api/sources/${sId}/disable` : `/api/sources/${sId}/enable`;
+        await fetch(endpoint, { method: "POST" });
+        fetchSources();
+      });
+    });
+
+    tbody.querySelectorAll(".btn-del-src").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const sId = btn.getAttribute("data-id");
+        if (confirm(`Delete declarative source '${sId}'?`)) {
+          await fetch(`/api/sources/${sId}`, { method: "DELETE" });
+          fetchSources();
+        }
+      });
+    });
   }
 
   function setupOnboardingWizard() {
@@ -1389,6 +1688,7 @@
 
     setupKeyboardShortcuts();
     setupSSE();
+    setupConnectionsPanel();
     setupCrosswalkTabs();
     setupOnboardingWizard();
     setupDensityToolbar();
