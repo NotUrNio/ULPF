@@ -121,6 +121,7 @@ def _build_pipeline(
     cfg: Path,
     sink_type: str,
     enrich: bool = True,
+    raw_store_type: str = 'file',
 ) -> tuple[Pipeline, list, Validator]:
     """
     Build and return a configured Pipeline, sinks list, and Validator.
@@ -129,7 +130,11 @@ def _build_pipeline(
     at once — the same normalized event, multiple SIEM/data-lake targets.
     """
     detector = FormatDetector(sources_config_path=cfg if cfg.exists() else None)
-    raw_store = FileRawStore(output / 'raw_store')
+    if str(raw_store_type).lower() == 'segmented':
+        from ulpf.core.segmented_raw_store import SegmentedRawStore
+        raw_store = SegmentedRawStore(output / 'raw_segments')
+    else:
+        raw_store = FileRawStore(output / 'raw_store')
     norm_engine = NormalizationEngine(schema_dir / 'mappings')
     validator = Validator(
         schema_path=schema_dir / 'ues_schema.json',
@@ -156,7 +161,7 @@ def _build_pipeline(
 
 
 def _worker_pipeline_factory(
-    output: Path, schema_dir: Path, cfg: Path, sink_type: str, enrich: bool,
+    output: Path, schema_dir: Path, cfg: Path, sink_type: str, enrich: bool, raw_store_type: str = 'file',
 ) -> Pipeline:
     """
     Module-level (hence picklable) pipeline builder for ParallelPipeline workers.
@@ -164,7 +169,7 @@ def _worker_pipeline_factory(
     process boundaries — this must live at module scope, and be bound to its
     arguments via functools.partial (also picklable) at the call site.
     """
-    pipeline, _sinks, _validator = _build_pipeline(output, schema_dir, cfg, sink_type, enrich)
+    pipeline, _sinks, _validator = _build_pipeline(output, schema_dir, cfg, sink_type, enrich, raw_store_type)
     return pipeline
 
 
@@ -188,6 +193,9 @@ def main(log_level: str) -> None:
                    ' (e.g. "ndjson,parquet"). kafka-real requires kafka-python.')
 @click.option('--output', '-o', 'output_dir', default='output',
               help='Output directory for normalized events and raw store.')
+@click.option('--raw-store', 'raw_store_type', default='file',
+              type=click.Choice(['file', 'segmented'], case_sensitive=False),
+              help='Raw storage engine: "file" (individual per-event forensic files) or "segmented" (high-throughput chunked storage with SQLite index).')
 @click.option('--config', '-c', 'config_path', default=None,
               help='Path to sources.yaml config file.')
 @click.option('--workers', '-w', 'workers', default=1, type=int,
@@ -197,7 +205,7 @@ def main(log_level: str) -> None:
 @click.option('--tenant-id', 'tenant_id', default='default',
               help='Tenant identifier attached to every ingested event.')
 def ingest(
-    input_path: str, sink_type: str, output_dir: str,
+    input_path: str, sink_type: str, output_dir: str, raw_store_type: str,
     config_path: str | None, workers: int, no_enrich: bool, tenant_id: str,
 ) -> None:
     """Ingest raw log files/stdin and produce normalized UES events."""
@@ -213,7 +221,7 @@ def ingest(
     schema_dir = _find_schema_dir()
     cfg = Path(config_path) if config_path else _find_config_dir() / 'sources.yaml'
 
-    click.echo(f'Starting ingestion from {input_path!r} -> {output_dir!r} [{sink_type}]'
+    click.echo(f'Starting ingestion from {input_path!r} -> {output_dir!r} [{sink_type}] (raw_store={raw_store_type})'
                + (f' [workers={workers}]' if workers > 1 else ''))
 
     if workers > 1:
@@ -224,7 +232,7 @@ def ingest(
         # process boundaries (a closure defined here would not be) — this is
         # what makes --workers actually work instead of crashing.
         factory = functools.partial(
-            _worker_pipeline_factory, output, schema_dir, cfg, sink_type, not no_enrich,
+            _worker_pipeline_factory, output, schema_dir, cfg, sink_type, not no_enrich, raw_store_type,
         )
 
         reader = FileReader(input_path) if input_path != '-' else StdinReader()
@@ -232,7 +240,7 @@ def ingest(
         stats = parallel.run(reader, tenant_id=tenant_id)
     else:
         pipeline, sinks, validator = _build_pipeline(
-            output, schema_dir, cfg, sink_type, not no_enrich,
+            output, schema_dir, cfg, sink_type, not no_enrich, raw_store_type,
         )
         reader = FileReader(input_path) if input_path != '-' else StdinReader()
         stats = pipeline.run(reader, tenant_id=tenant_id)

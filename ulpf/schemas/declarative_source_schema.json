@@ -39,18 +39,31 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["line", "delimiter", "regex_multiline", "json_stream", "syslog_octet"],
+          "enum": ["line", "delimiter", "regex_multiline", "multiline_regex", "multiline", "json_stream", "syslog_octet"],
           "default": "line"
         },
         "delimiter": {
           "type": "string",
           "default": "\n"
         },
+        "pattern": {
+          "type": "string"
+        },
+        "match_mode": {
+          "type": "string",
+          "enum": ["start", "end"]
+        },
         "start_pattern": {
           "type": "string"
         },
         "end_pattern": {
           "type": "string"
+        },
+        "case_insensitive": {
+          "type": "boolean"
+        },
+        "max_lines_per_event": {
+          "type": "integer"
         },
         "max_bytes": {
           "type": "integer",

@@ -116,7 +116,10 @@ class Pipeline:
         event_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"ulpf:{tenant_id}:{source_tag}:{raw_hash}"))
 
         # 3. Store raw event immediately (zero information loss even on parse errors)
-        self.raw_store.put(event_id, raw_bytes)
+        try:
+            self.raw_store.put(event_id, raw_bytes, tenant_id=tenant_id, ingest_ts=ingest_ts)
+        except TypeError:
+            self.raw_store.put(event_id, raw_bytes)
 
         # 4. Detect format
         format_id = self.detector.detect(raw_line, source_tag)
