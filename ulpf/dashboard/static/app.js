@@ -812,13 +812,17 @@
   }
 
   // --------------------------------------------------------------------------
-  // Event Inspection & Traceability Split Modal
   // --------------------------------------------------------------------------
+  // Event Inspection, Traceability & Crosswalk Split Modal
+  // --------------------------------------------------------------------------
+  let currentInspectedEvent = null;
+
   async function openEventInspector(eventId) {
     try {
       const res = await fetch(`/api/events/${eventId}`);
       if (!res.ok) throw new Error("Event not found");
       const data = await res.json();
+      currentInspectedEvent = data;
 
       el.inspectEventId.textContent = data.event_id;
       el.inspectParser.textContent = data.parser_name;
@@ -828,9 +832,65 @@
       el.inspectRawPayload.textContent = data.raw_payload;
       el.inspectUesJson.textContent = JSON.stringify(data.normalized, null, 2);
 
+      // Reset tabs styling
+      const tabUes = document.getElementById("inspectTabUesBtn");
+      const tabOcsf = document.getElementById("inspectTabOcsfBtn");
+      const tabEcs = document.getElementById("inspectTabEcsBtn");
+      if (tabUes) { tabUes.style.background = "var(--accent)"; tabUes.style.color = "white"; }
+      if (tabOcsf) { tabOcsf.style.background = ""; tabOcsf.style.color = ""; }
+      if (tabEcs) { tabEcs.style.background = ""; tabEcs.style.color = ""; }
+
       el.inspectorModal.classList.add("open");
     } catch (err) {
       alert("Failed to load event details: " + err.message);
+    }
+  }
+
+  function setupCrosswalkTabs() {
+    const tabUes = document.getElementById("inspectTabUesBtn");
+    const tabOcsf = document.getElementById("inspectTabOcsfBtn");
+    const tabEcs = document.getElementById("inspectTabEcsBtn");
+
+    if (tabUes) {
+      tabUes.addEventListener("click", () => {
+        if (!currentInspectedEvent) return;
+        tabUes.style.background = "var(--accent)"; tabUes.style.color = "white";
+        if (tabOcsf) { tabOcsf.style.background = ""; tabOcsf.style.color = ""; }
+        if (tabEcs) { tabEcs.style.background = ""; tabEcs.style.color = ""; }
+        el.inspectUesJson.textContent = JSON.stringify(currentInspectedEvent.normalized, null, 2);
+      });
+    }
+
+    if (tabOcsf) {
+      tabOcsf.addEventListener("click", async () => {
+        if (!currentInspectedEvent) return;
+        tabOcsf.style.background = "var(--accent)"; tabOcsf.style.color = "white";
+        if (tabUes) { tabUes.style.background = ""; tabUes.style.color = ""; }
+        if (tabEcs) { tabEcs.style.background = ""; tabEcs.style.color = ""; }
+        try {
+          const res = await fetch(`/api/events/${currentInspectedEvent.event_id}/crosswalk?format=ocsf`);
+          const d = await res.json();
+          el.inspectUesJson.textContent = JSON.stringify(d.ocsf, null, 2);
+        } catch (e) {
+          el.inspectUesJson.textContent = "Error fetching OCSF format: " + e.message;
+        }
+      });
+    }
+
+    if (tabEcs) {
+      tabEcs.addEventListener("click", async () => {
+        if (!currentInspectedEvent) return;
+        tabEcs.style.background = "var(--accent)"; tabEcs.style.color = "white";
+        if (tabUes) { tabUes.style.background = ""; tabUes.style.color = ""; }
+        if (tabOcsf) { tabOcsf.style.background = ""; tabOcsf.style.color = ""; }
+        try {
+          const res = await fetch(`/api/events/${currentInspectedEvent.event_id}/crosswalk?format=ecs`);
+          const d = await res.json();
+          el.inspectUesJson.textContent = JSON.stringify(d.ecs, null, 2);
+        } catch (e) {
+          el.inspectUesJson.textContent = "Error fetching ECS format: " + e.message;
+        }
+      });
     }
   }
 
@@ -873,157 +933,8 @@
   }
 
   // --------------------------------------------------------------------------
-  // Live Host & Process Monitor Dedicated Workspace
+  // Tab Switching Management
   // --------------------------------------------------------------------------
-  let activeHostSubTab = "connections";
-
-  async function fetchHostData() {
-    try {
-      const [statusRes, connsRes, eventsRes, procsRes] = await Promise.all([
-        fetch("/api/live-monitor/status").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/live-monitor/connections").then((r) => r.json()).catch(() => ({ connections: [] })),
-        fetch("/api/live-monitor/events").then((r) => r.json()).catch(() => ({ events: [] })),
-        fetch("/api/live-monitor/processes").then((r) => r.json()).catch(() => ({ processes: [] })),
-      ]);
-
-      // Update Header Stats
-      const statName = document.getElementById("hostStatName");
-      const statUser = document.getElementById("hostStatUser");
-      const statProcs = document.getElementById("hostStatProcs");
-      const statConns = document.getElementById("hostStatConns");
-      const statEvents = document.getElementById("hostStatEvents");
-      const btnToggle = document.getElementById("btnToggleHostMonitor");
-      const btnText = document.getElementById("btnToggleHostText");
-      const tabDot = document.getElementById("tabLiveHostDot");
-
-      if (statName) statName.textContent = statusRes.hostname || "Local Machine";
-      if (statUser) statUser.textContent = `User: ${statusRes.username || "-"}`;
-      if (statProcs) statProcs.textContent = (statusRes.tracked_processes || procsRes.processes?.length || 0).toLocaleString();
-      if (statConns) statConns.textContent = (connsRes.connections?.length || 0).toLocaleString();
-      if (statEvents) statEvents.textContent = (statusRes.events_captured || eventsRes.events?.length || 0).toLocaleString();
-
-      const countConns = document.getElementById("countSubConns");
-      const countEvents = document.getElementById("countSubEvents");
-      const countProcs = document.getElementById("countSubProcs");
-      if (countConns) countConns.textContent = connsRes.connections?.length || 0;
-      if (countEvents) countEvents.textContent = eventsRes.events?.length || 0;
-      if (countProcs) countProcs.textContent = procsRes.processes?.length || 0;
-
-      if (btnToggle && btnText) {
-        if (statusRes.running) {
-          btnToggle.classList.add("active");
-          btnText.textContent = `Capturing Active (${statusRes.interval_ms || 250}ms)`;
-          if (tabDot) tabDot.style.display = "inline-block";
-        } else {
-          btnToggle.classList.remove("active");
-          btnText.textContent = "Start Live Capture";
-          if (tabDot) tabDot.style.display = "none";
-        }
-      }
-
-      // Render Active Connections Table
-      const connsTbody = document.getElementById("hostConnectionsTableBody");
-      if (connsTbody) {
-        if (!statusRes.running) {
-          connsTbody.innerHTML = `<tr><td colspan="6" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to begin collecting and streaming active process sockets.</td></tr>`;
-        } else {
-          const conns = connsRes.connections || [];
-          if (conns.length === 0) {
-            connsTbody.innerHTML = `<tr><td colspan="6" class="host-empty">No active outbound connections. Start Live Capture or open an app to inspect.</td></tr>`;
-          } else {
-            connsTbody.innerHTML = conns
-              .map((c) => {
-                const proc = escapeHtml(c.process_name || "Unknown");
-                const pid = c.pid || "-";
-                const src = `${c.src_ip}:${c.src_port}`;
-                const dst = `${c.dst_ip}:${c.dst_port}`;
-                const proto = (c.proto || "tcp").toUpperCase();
-                return `
-                  <tr>
-                    <td><strong style="color: var(--text-primary);">${proc}</strong></td>
-                    <td class="mono-text" style="color: var(--text-muted);">${pid}</td>
-                    <td class="mono-text">${escapeHtml(src)}</td>
-                    <td class="mono-text" style="color: var(--accent); font-weight: 600;">${escapeHtml(dst)}</td>
-                    <td><span class="badge badge-subtle">${proto}</span></td>
-                    <td><span class="badge badge-allow">ACTIVE</span></td>
-                  </tr>
-                `;
-              })
-              .join("");
-          }
-        }
-      }
-
-      // Render Host Events Table
-      const eventsTbody = document.getElementById("hostEventsTableBody");
-      if (eventsTbody) {
-        if (!statusRes.running) {
-          eventsTbody.innerHTML = `<tr><td colspan="5" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to record process executions and terminations.</td></tr>`;
-        } else {
-          const evs = eventsRes.events || [];
-          if (evs.length === 0) {
-            eventsTbody.innerHTML = `<tr><td colspan="5" class="host-empty">No host events captured yet. Monitoring is active.</td></tr>`;
-          } else {
-            eventsTbody.innerHTML = evs
-              .map((ev) => {
-                const ts = formatTimestamp(ev.timestamp);
-                const act = (ev.action || "event").toLowerCase();
-                let badge = `<span class="badge badge-unknown">${escapeHtml(act)}</span>`;
-                if (act.includes("start") || act.includes("launch")) badge = `<span class="badge badge-allow">Started</span>`;
-                else if (act.includes("stop") || act.includes("exit")) badge = `<span class="badge badge-deny">Exited</span>`;
-                else if (act.includes("permit") || act.includes("connect")) badge = `<span class="badge badge-allow">Connected</span>`;
-                else badge = `<span class="badge badge-cat-system">${escapeHtml(act)}</span>`;
-
-                const proc = escapeHtml(ev.process_name || "-");
-                const user = escapeHtml(ev.username || "-");
-                const msg = escapeHtml(ev.message || "-");
-                return `
-                  <tr>
-                    <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${ts}</td>
-                    <td>${badge}</td>
-                    <td><strong>${proc}</strong></td>
-                    <td style="color: var(--text-secondary);">${user}</td>
-                    <td class="mono-text" style="color: var(--text-primary); font-size: 0.78rem;">${msg}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-          }
-        }
-      }
-
-      // Render Processes Snapshot Table
-      const procsTbody = document.getElementById("hostProcessesTableBody");
-      if (procsTbody) {
-        if (!statusRes.running) {
-          procsTbody.innerHTML = `<tr><td colspan="3" class="host-empty" style="padding: 40px 20px;"><strong style="display:block; color:var(--text-primary); font-size: 0.95rem; margin-bottom:6px;">Live Capture Inactive</strong>Click <strong>Start Live Capture</strong> above to inspect running processes.</td></tr>`;
-        } else {
-          const procs = procsRes.processes || [];
-          if (procs.length === 0) {
-            procsTbody.innerHTML = `<tr><td colspan="3" class="host-empty">No processes returned.</td></tr>`;
-          } else {
-            procsTbody.innerHTML = procs
-              .map((p) => {
-                const pid = p.pid || "-";
-                const name = escapeHtml(p.name || "-");
-                const path = escapeHtml(p.path || "-");
-                return `
-                  <tr>
-                    <td class="mono-text" style="color: var(--text-muted); width: 80px;">${pid}</td>
-                    <td><strong style="color: var(--text-primary);">${name}</strong></td>
-                    <td class="mono-text" style="font-size: 0.75rem; color: var(--text-secondary);">${path}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load live host data:", err);
-    }
-  }
-
   function switchTab(target) {
     state.activeTab = target;
     if (el.proTabsBar) {
@@ -1032,30 +943,16 @@
       });
     }
 
+    const sourcesPanel = document.getElementById("tabContentSources");
+    if (sourcesPanel) sourcesPanel.style.display = target === "sources" ? "block" : "none";
     if (el.eventsPanel) el.eventsPanel.style.display = target === "events" ? "flex" : "none";
     if (el.deadLetterPanel) el.deadLetterPanel.style.display = target === "deadletter" ? "block" : "none";
     if (el.parsersPanel) el.parsersPanel.style.display = target === "parsers" ? "block" : "none";
-    if (el.liveHostPanel) el.liveHostPanel.style.display = target === "livehost" ? "block" : "none";
-    if (el.filterSection) el.filterSection.style.display = target === "livehost" ? "none" : "block";
+    if (el.filterSection) el.filterSection.style.display = (target === "sources") ? "none" : "block";
 
-    if (el.quickChips) {
-      el.quickChips.querySelectorAll(".chip").forEach((c) => {
-        const f = c.getAttribute("data-filter");
-        if (target === "livehost") {
-          c.classList.toggle("active", f === "live_host");
-        } else {
-          if (f === "live_host") {
-            c.classList.remove("active");
-          } else if (f === "all" && !state.filters.action && state.filters.severityMin === null) {
-            c.classList.add("active");
-          }
-        }
-      });
-    }
-
+    if (target === "sources") fetchSources();
     if (target === "deadletter") fetchDeadLetterRecords();
     if (target === "parsers") fetchParsersHealth();
-    if (target === "livehost") fetchHostData();
     if (target === "events") {
       if (virtualScroller) {
         virtualScroller.render();
@@ -1069,61 +966,245 @@
     }
   }
 
-  function setupLiveHostPanel() {
-    const btnToggle = document.getElementById("btnToggleHostMonitor");
-    const btnRefresh = document.getElementById("btnRefreshHostData");
-    const subtabs = document.querySelectorAll(".host-subtab");
+  // --------------------------------------------------------------------------
+  // Sources & Declarative Onboarding Engine
+  // --------------------------------------------------------------------------
+  async function fetchSources() {
+    try {
+      const res = await fetch("/api/sources");
+      if (!res.ok) return;
+      const data = await res.json();
+      const sources = data.sources || [];
+      const metrics = data.metrics || {};
 
-    if (btnToggle) {
-      btnToggle.addEventListener("click", async () => {
-        const isRunning = btnToggle.classList.contains("active");
-        const endpoint = isRunning ? "/api/live-monitor/stop" : "/api/live-monitor/start?interval_ms=250";
+      const activeEl = document.getElementById("srcStatActive");
+      const epsEl = document.getElementById("srcStatEPS");
+      const valEl = document.getElementById("srcStatValidity");
+      const dlqEl = document.getElementById("srcStatDLQ");
+      const tbody = document.getElementById("sourcesTableBody");
+
+      if (activeEl) activeEl.textContent = `${metrics.active_sources || 0} / ${metrics.total_sources_registered || 0}`;
+      if (epsEl) epsEl.textContent = `${(metrics.total_events || 0).toLocaleString()} events`;
+      if (valEl) valEl.textContent = `${metrics.validity_rate_pct || 100}%`;
+      if (dlqEl) dlqEl.textContent = (metrics.total_dead_letter || 0).toLocaleString();
+
+      if (tbody) {
+        if (sources.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="host-empty">No log sources registered yet.</td></tr>`;
+        } else {
+          tbody.innerHTML = sources
+            .map((s) => {
+              const isEnabled = s.enabled === 1;
+              const statusBadge = isEnabled
+                ? `<span class="badge badge-allow">ACTIVE</span>`
+                : `<span class="badge badge-subtle">DISABLED</span>`;
+              
+              let healthBadge = `<span class="badge badge-allow">● Healthy</span>`;
+              if (s.health_state === "warning" || s.dead_letter_count > 0) {
+                healthBadge = `<span class="badge badge-cat-threat" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">● Warning (${s.dead_letter_count} DLQ)</span>`;
+              } else if (s.health_state === "error") {
+                healthBadge = `<span class="badge badge-deny">● Error</span>`;
+              }
+
+              const typeBadge = s.source_type === "declarative"
+                ? `<span class="badge badge-cat-system" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">No-Code (${escapeHtml(s.input_type || "YAML")})</span>`
+                : `<span class="badge badge-subtle">Built-in (${escapeHtml(s.input_type || "plugin")})</span>`;
+
+              const lastEvent = s.last_event_at ? formatTimestamp(s.last_event_at) : "Never";
+
+              return `
+                <tr>
+                  <td>
+                    <strong style="color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(s.name || s.source_id)}</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(s.vendor || "")} / ${escapeHtml(s.product || "")}</div>
+                  </td>
+                  <td>${typeBadge}</td>
+                  <td>${healthBadge}</td>
+                  <td class="mono-text" style="font-weight: 600;">${(s.events_processed || 0).toLocaleString()}</td>
+                  <td>${statusBadge}</td>
+                  <td class="mono-text" style="font-size: 0.75rem; color: var(--text-muted);">${lastEvent}</td>
+                  <td>
+                    <div style="display: flex; gap: 6px;">
+                      <button class="pagination-btn btn-toggle-src" data-id="${escapeHtml(s.source_id)}" data-enabled="${isEnabled ? '1' : '0'}" style="padding: 2px 8px; font-size: 0.75rem;">
+                        ${isEnabled ? 'Disable' : 'Enable'}
+                      </button>
+                      ${s.source_type === 'declarative' ? `<button class="pagination-btn btn-del-src" data-id="${escapeHtml(s.source_id)}" style="padding: 2px 8px; font-size: 0.75rem; color: var(--color-danger);">Delete</button>` : ''}
+                    </div>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("");
+
+          // Attach action listeners
+          tbody.querySelectorAll(".btn-toggle-src").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const sId = btn.getAttribute("data-id");
+              const isEn = btn.getAttribute("data-enabled") === "1";
+              const endpoint = isEn ? `/api/sources/${sId}/disable` : `/api/sources/${sId}/enable`;
+              await fetch(endpoint, { method: "POST" });
+              fetchSources();
+            });
+          });
+
+          tbody.querySelectorAll(".btn-del-src").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const sId = btn.getAttribute("data-id");
+              if (confirm(`Delete declarative source '${sId}'?`)) {
+                await fetch(`/api/sources/${sId}`, { method: "DELETE" });
+                fetchSources();
+              }
+            });
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load sources:", err);
+    }
+  }
+
+  function setupOnboardingWizard() {
+    const modal = document.getElementById("onboardingModal");
+    const openBtn = document.getElementById("openOnboardingBtn");
+    const closeBtn = document.getElementById("closeOnboardingBtn");
+    const cancelBtn = document.getElementById("cancelOnboardingBtn");
+    const inferBtn = document.getElementById("wizardInferBtn");
+    const testBtn = document.getElementById("wizardTestBtn");
+    const saveBtn = document.getElementById("saveOnboardingBtn");
+
+    const sampleArea = document.getElementById("wizardSampleEvent");
+    const yamlArea = document.getElementById("wizardConfigYaml");
+    const resultsBox = document.getElementById("wizardTestResults");
+    const statusBadge = document.getElementById("wizardStatusBadge");
+    const extractedPre = document.getElementById("wizardExtractedJson");
+    const normalizedPre = document.getElementById("wizardNormalizedJson");
+
+    const sampleKV = 'devtime="2024-03-15T10:22:45Z" hostname=fw-edge-01 srcip=192.168.1.55 dstip=10.0.0.12 srcport=54321 dstport=443 proto=TCP action=deny user=malicious_actor bytes_in=0 bytes_out=64';
+    const sampleCSV = 'SECURE_PROXY_GW,2024-03-15T10:22:45Z,192.168.1.105,198.51.100.20,443,alice,CONNECT,200,1024,4096,allow';
+    const sampleJSON = '{"auth_event_type":"login_failed","account_id":"acc-9921","timestamp":"2024-03-15T10:22:45Z","status":"failure","actor":{"username":"admin","ip":"203.0.113.88"},"policy":{"rule_id":"AUTH_RULE_01"}}';
+
+    if (openBtn && modal) {
+      openBtn.addEventListener("click", () => {
+        if (!sampleArea.value.trim()) sampleArea.value = sampleKV;
+        if (!yamlArea.value.trim()) {
+          yamlArea.value = `name: custom_firewall\nvendor: CustomSec\nproduct: PerimeterGuard\nversion: "1.0.0"\nenabled: true\nlog_format: "custom_fw"\n\nframing:\n  type: line\n\ndetection:\n  contains:\n    - "srcip="\n    - "dstip="\n  contains_mode: all\n\nparser:\n  type: key_value\n  pair_delimiter: " "\n  kv_delimiter: "="\n\nfields:\n  timestamp: devtime\n  types:\n    srcport: port\n    dstport: port\n    bytes_in: int\n    bytes_out: int\n\nnormalize:\n  source.vendor: CustomSec\n  source.product: PerimeterGuard\n  source.device_hostname: hostname\n  event.category: network\n  event.action: action\n  event.outcome: action\n  event.severity_numeric: 5.0\n  network.src_ip: srcip\n  network.dst_ip: dstip\n  network.src_port: srcport\n  network.dst_port: dstport\n  network.protocol: proto\n  identity.username: user\n  retain_unmapped: true`;
+        }
+        modal.classList.add("open");
+      });
+    }
+
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.remove("open"));
+    if (cancelBtn) cancelBtn.addEventListener("click", () => modal.classList.remove("open"));
+
+    document.getElementById("wizardLoadSampleKVBtn")?.addEventListener("click", () => {
+      sampleArea.value = sampleKV;
+      inferBtn?.click();
+    });
+    document.getElementById("wizardLoadSampleCSVBtn")?.addEventListener("click", () => {
+      sampleArea.value = sampleCSV;
+      inferBtn?.click();
+    });
+    document.getElementById("wizardLoadSampleJSONBtn")?.addEventListener("click", () => {
+      sampleArea.value = sampleJSON;
+      inferBtn?.click();
+    });
+
+    if (inferBtn) {
+      inferBtn.addEventListener("click", async () => {
+        const text = sampleArea.value.trim();
+        if (!text) { alert("Please paste a sample log line first."); return; }
+        inferBtn.textContent = "Inferring...";
         try {
-          btnToggle.style.opacity = "0.5";
-          await fetch(endpoint, { method: "POST" });
-          await fetchHostData();
-        } catch (err) {
-          console.error("Toggle error:", err);
+          const res = await fetch("/api/sources/infer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sample_event: text, name_hint: "custom_source" }),
+          });
+          const d = await res.json();
+          if (d.draft_config) {
+            // Format into YAML string or JSON
+            yamlArea.value = JSON.stringify(d.draft_config, null, 2);
+          }
+        } catch (e) {
+          alert("Inference failed: " + e.message);
         } finally {
-          btnToggle.style.opacity = "1";
+          inferBtn.textContent = "⚡ Auto-Infer Configuration";
         }
       });
     }
 
-    if (btnRefresh) {
-      btnRefresh.addEventListener("click", () => fetchHostData());
+    if (testBtn) {
+      testBtn.addEventListener("click", async () => {
+        const sample = sampleArea.value.trim();
+        const cfgText = yamlArea.value.trim();
+        if (!sample || !cfgText) { alert("Sample event and configuration are required."); return; }
+
+        let parsedCfg = null;
+        try {
+          parsedCfg = JSON.parse(cfgText);
+        } catch (e) {
+          // If pure YAML, send as config dict or parse basic keys
+          alert("Please verify configuration is formatted properly (valid JSON/YAML).");
+          return;
+        }
+
+        testBtn.textContent = "Testing...";
+        try {
+          const res = await fetch("/api/sources/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config: parsedCfg, sample_event: sample, tenant_id: "demo_tenant" }),
+          });
+          const result = await res.json();
+          resultsBox.style.display = "block";
+          if (result.valid) {
+            statusBadge.innerHTML = `<span class="badge badge-allow" style="font-size: 0.85rem; padding: 4px 10px;">✔ VALIDATION PASSED — Matched Format: ${escapeHtml(result.detected_format)} (Hash: ${result.raw_hash.substring(0, 12)}...)</span>`;
+          } else {
+            statusBadge.innerHTML = `<span class="badge badge-deny" style="font-size: 0.85rem; padding: 4px 10px;">✖ VALIDATION FAILED: ${(result.errors || []).join("; ")}</span>`;
+          }
+          extractedPre.textContent = JSON.stringify(result.extracted_fields, null, 2);
+          normalizedPre.textContent = JSON.stringify(result.normalized_event, null, 2);
+        } catch (e) {
+          alert("Test failed: " + e.message);
+        } finally {
+          testBtn.textContent = "▶ Test Mapping Against Sample";
+        }
+      });
     }
 
-    subtabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const target = tab.getAttribute("data-subtab");
-        activeHostSubTab = target;
-        subtabs.forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", async () => {
+        const cfgText = yamlArea.value.trim();
+        let parsedCfg = null;
+        try {
+          parsedCfg = JSON.parse(cfgText);
+        } catch (e) {
+          alert("Please ensure configuration is valid JSON/YAML.");
+          return;
+        }
 
-        const viewConns = document.getElementById("hostSubViewConnections");
-        const viewEvents = document.getElementById("hostSubViewEvents");
-        const viewProcs = document.getElementById("hostSubViewProcesses");
-
-        if (viewConns) viewConns.style.display = target === "connections" ? "block" : "none";
-        if (viewEvents) viewEvents.style.display = target === "events" ? "block" : "none";
-        if (viewProcs) viewProcs.style.display = target === "processes" ? "block" : "none";
-      });
-    });
-
-    const btnBack = document.getElementById("btnBackToEvents");
-    if (btnBack) {
-      btnBack.addEventListener("click", () => {
-        switchTab("events");
+        try {
+          saveBtn.textContent = "Saving...";
+          const res = await fetch("/api/sources", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config: parsedCfg }),
+          });
+          const d = await res.json();
+          if (res.ok) {
+            alert(`Log Source '${parsedCfg.name}' successfully activated!`);
+            modal.classList.remove("open");
+            fetchSources();
+          } else {
+            alert(`Failed to save source: ${JSON.stringify(d.detail)}`);
+          }
+        } catch (e) {
+          alert("Save error: " + e.message);
+        } finally {
+          saveBtn.textContent = "✔ Save & Activate Source";
+        }
       });
     }
-
-    // Background poller when liveHost tab is active
-    setInterval(() => {
-      if (state.activeTab === "livehost") {
-        fetchHostData();
-      }
-    }, 1500);
   }
 
   // --------------------------------------------------------------------------
@@ -1308,7 +1389,8 @@
 
     setupKeyboardShortcuts();
     setupSSE();
-    setupLiveHostPanel();
+    setupCrosswalkTabs();
+    setupOnboardingWizard();
     setupDensityToolbar();
     window.addEventListener("resize", debounce(() => virtualScroller.render(), 100));
 
@@ -1331,27 +1413,39 @@
       if (step && msg) step.textContent = msg;
     }
 
-    setProgress(15, "Connecting to SQLite index cache...");
-    await new Promise((r) => setTimeout(r, 100));
+    function dismissScreen() {
+      if (screen && !screen.classList.contains("hidden")) {
+        screen.classList.add("hidden");
+        setTimeout(() => { screen.style.display = "none"; }, 400);
+      }
+    }
 
-    setProgress(40, "Fetching Universal Event Schema metrics...");
-    await fetchStats();
-    await new Promise((r) => setTimeout(r, 120));
+    // Safety timeout: ensure screen is ALWAYS dismissed even if network requests stall
+    const safetyTimer = setTimeout(dismissScreen, 2500);
 
-    setProgress(75, "Syncing perimeter normalized event store...");
-    await fetchEvents(1);
-    await new Promise((r) => setTimeout(r, 120));
+    try {
+      setProgress(15, "Connecting to SQLite index cache...");
+      await new Promise((r) => setTimeout(r, 80));
 
-    setProgress(92, "Verifying parser plugin health...");
-    await fetchParsersHealth();
-    await new Promise((r) => setTimeout(r, 80));
+      setProgress(40, "Fetching Universal Event Schema metrics...");
+      try { await fetchStats(); } catch (e) { console.warn(e); }
+      await new Promise((r) => setTimeout(r, 80));
 
-    setProgress(100, "Pipeline ready!");
-    await new Promise((r) => setTimeout(r, 160));
+      setProgress(75, "Syncing perimeter normalized event store...");
+      try { await fetchEvents(1); } catch (e) { console.warn(e); }
+      await new Promise((r) => setTimeout(r, 80));
 
-    if (screen) {
-      screen.classList.add("hidden");
-      setTimeout(() => { screen.style.display = "none"; }, 400);
+      setProgress(92, "Verifying parser plugin health...");
+      try { await fetchParsersHealth(); } catch (e) { console.warn(e); }
+      await new Promise((r) => setTimeout(r, 60));
+
+      setProgress(100, "Pipeline ready!");
+      await new Promise((r) => setTimeout(r, 100));
+    } catch (e) {
+      console.warn("Loading error:", e);
+    } finally {
+      clearTimeout(safetyTimer);
+      dismissScreen();
     }
   }
 
