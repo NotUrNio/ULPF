@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/NotUrNio/ULPF"><img src="https://img.shields.io/badge/tests-168%20passed-10b981?logo=pytest&logoColor=white" alt="tests" /></a>
+  <a href="https://github.com/NotUrNio/ULPF"><img src="https://img.shields.io/badge/tests-173%20passed-10b981?logo=pytest&logoColor=white" alt="tests" /></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white" alt="python" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
   <a href="docker/Dockerfile"><img src="https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white" alt="docker" /></a>
@@ -33,13 +33,13 @@ Every raw event's authentic bytes are hashed and persisted **before** detection/
 - **OCSF & ECS Crosswalk Standards Translation** — translates UES normalized events into Open Cybersecurity Schema Framework (OCSF v1.1.0, classes 4001, 3001, 2001, 1001, 5001, 6004) and Elastic Common Schema (ECS v8.11.0).
 - **11 out-of-the-box log parsers** — Syslog RFC 5424/3164, CEF (ArcSight/Fortinet/Snort/CheckPoint), LEEF 1.0/2.0 (IBM QRadar), Windows Event Log / Generic XML, Cisco ASA, Palo Alto Networks CSV, AWS CloudTrail, Azure Monitor, GCP Cloud Audit, and JSON Passthrough.
 - **True plug-and-play parsers** — drop a new parser file into `parsers/` or YAML into `schemas/declarative_sources/` and it self-registers dynamically.
-- **Live syslog ingestion & Localhost Monitor** — `ulpf listen` runs a UDP+TCP syslog receiver, and the built-in host monitor captures localhost database (MySQL port 3306, Redis, Postgres) & network connections with zero leakage.
+- **Live syslog ingestion & Localhost Monitor** — `ulpf listen` runs a UDP+TCP syslog receiver, and the built-in host monitor captures localhost database (MySQL port 3306, Redis, Postgres) & network connections with zero leakage across Windows, Linux, and macOS.
 - **Horizontal multi-process scaling & Benchmarking** — `ulpf ingest --workers N` streams chunked events across a worker pool; `ulpf benchmark` provides rigorous EPS & memory profiling.
 - **Multi-sink fan-out** — `--sink ndjson,parquet,cef-egress,leef-egress` writes normalized events to a data lake and legacy SIEM receivers concurrently.
 - **Offline IP & threat enrichment** — pure Python, air-gap safe classification for RFC 1918 private ranges, cloud ASN recognition (AWS, Azure, GCP, Cloudflare), and embedded threat intel feeds.
 - **Statistical anomaly detection engine** — pure Python Z-score deviation (>3σ), IQR byte-volume outlier detection, frequency burst detection, and 24-dim ML feature vectors (`ulpf analyze --emit-features`).
 - **REST API & Interactive Operations Dashboard** — FastAPI backend with SQLite indexer, live SSE streaming, Sources Management & Onboarding Wizard modal, and forensic Traceability Split Inspector.
-- **168 Pytest tests & 79 master audit checks, 100% green** — comprehensive unit, declarative onboarding, framing, segmented store, crosswalk, live telemetry, and end-to-end integration tests.
+- **173 Pytest tests & 79 master audit checks, 100% green** — comprehensive unit, declarative onboarding, framing, segmented store, crosswalk, live telemetry, and end-to-end integration tests.
 
 ---
 

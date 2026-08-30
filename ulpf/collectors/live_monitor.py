@@ -273,6 +273,43 @@ class LiveSystemMonitor:
             logger.debug(f"TCP scan error: {e}")
         return conns
 
+    def _scan_network_connections_posix(self) -> list[dict[str, Any]]:
+        """
+        Scan active network sockets on Linux / macOS / POSIX systems using psutil.
+        Returns identical schema to Windows network scan.
+        """
+        conns: list[dict[str, Any]] = []
+        try:
+            import psutil
+            # Scan inet connections (TCP + UDP)
+            for sconn in psutil.net_connections(kind="inet"):
+                if not sconn.raddr:
+                    continue
+                dst_ip = str(getattr(sconn.raddr, "ip", "") or "")
+                dst_port = int(getattr(sconn.raddr, "port", 0) or 0)
+                src_ip = str(getattr(sconn.laddr, "ip", "0.0.0.0") or "0.0.0.0") if sconn.laddr else "0.0.0.0"
+                src_port = int(getattr(sconn.laddr, "port", 0) or 0) if sconn.laddr else 0
+                proto = "tcp" if sconn.type == socket.SOCK_STREAM else "udp"
+
+                if dst_ip not in ("0.0.0.0", "255.255.255.255", "") and dst_port > 0:
+                    state_str = str(sconn.status or "ESTABLISHED")
+                    service_lbl = _PORT_SERVICE_MAP.get(dst_port, _PORT_SERVICE_MAP.get(src_port, "TCP Socket" if proto == "tcp" else "UDP Socket"))
+                    conns.append({
+                        "pid": int(sconn.pid or 0),
+                        "src_ip": src_ip,
+                        "src_port": src_port,
+                        "dst_ip": dst_ip,
+                        "dst_port": dst_port,
+                        "proto": proto,
+                        "state": state_str,
+                        "state_raw": state_str,
+                        "service_inferred": service_lbl,
+                        "is_localhost": dst_ip in ("127.0.0.1", "::1", "localhost") or src_ip in ("127.0.0.1", "::1", "localhost"),
+                    })
+        except Exception as e:
+            logger.debug(f"POSIX network scan error: {e}")
+        return conns
+
     def _build_process_event_xml(
         self,
         event_id_num: int,
@@ -484,9 +521,11 @@ class LiveSystemMonitor:
         # Baseline connections
         if self.is_windows:
             initial_conns = self._scan_network_connections_windows()
-            for c in initial_conns:
-                key = (c["pid"], c["src_ip"], c["src_port"], c["dst_ip"], c["dst_port"], c["proto"])
-                self.seen_connections.add(key)
+        else:
+            initial_conns = self._scan_network_connections_posix()
+        for c in initial_conns:
+            key = (c["pid"], c["src_ip"], c["src_port"], c["dst_ip"], c["dst_port"], c["proto"])
+            self.seen_connections.add(key)
 
         win_poll_counter = 0
 
@@ -516,17 +555,21 @@ class LiveSystemMonitor:
                 # 3. Detect Active Network Connections (IPs, Ports, Protocols)
                 if self.is_windows:
                     active_conns = self._scan_network_connections_windows()
-                    for conn in active_conns:
-                        key = (conn["pid"], conn["src_ip"], conn["src_port"], conn["dst_ip"], conn["dst_port"], conn["proto"])
-                        if key not in self.seen_connections:
-                            self.seen_connections.add(key)
-                            if len(self.seen_connections) > 10000:
-                                self.seen_connections.clear()
-                            # Resolve process info
-                            proc_info = self.known_pids.get(conn["pid"], {"name": "system.exe", "path": ""})
-                            net_xml = self._build_network_connection_xml(conn, proc_info, now)
-                            self._dispatch_event(net_xml, "live_network_monitor", now)
-                            logger.info(f"Captured connection: {proc_info['name']} -> {conn['dst_ip']}:{conn['dst_port']}")
+                else:
+                    active_conns = self._scan_network_connections_posix()
+
+                for conn in active_conns:
+                    key = (conn["pid"], conn["src_ip"], conn["src_port"], conn["dst_ip"], conn["dst_port"], conn["proto"])
+                    if key not in self.seen_connections:
+                        self.seen_connections.add(key)
+                        if len(self.seen_connections) > 10000:
+                            self.seen_connections.clear()
+                        # Resolve process info
+                        default_name = "system.exe" if self.is_windows else "system"
+                        proc_info = self.known_pids.get(conn["pid"], {"name": default_name, "path": ""})
+                        net_xml = self._build_network_connection_xml(conn, proc_info, now)
+                        self._dispatch_event(net_xml, "live_network_monitor", now)
+                        logger.info(f"Captured connection: {proc_info['name']} -> {conn['dst_ip']}:{conn['dst_port']}")
 
                 # 4. Poll Windows Event Logs every 4th iteration (~1 second)
                 win_poll_counter += 1
@@ -579,19 +622,21 @@ class LiveSystemMonitor:
             return list(self.event_history)[:limit]
 
     def get_active_connections(self) -> list[dict[str, Any]]:
-        """Return currently active outbound TCP/UDP socket connections."""
+        """Return currently active outbound TCP/UDP socket connections across Windows, Linux, and macOS."""
         if self.is_windows:
             raw_conns = self._scan_network_connections_windows()
-            resolved = []
-            for c in raw_conns:
-                p_info = self.known_pids.get(c["pid"], {"name": "system.exe", "path": ""})
-                resolved.append({
-                    **c,
-                    "process_name": p_info.get("name", "system.exe"),
-                    "process_path": p_info.get("path", ""),
-                })
-            return resolved
-        return []
+        else:
+            raw_conns = self._scan_network_connections_posix()
+        resolved = []
+        default_name = "system.exe" if self.is_windows else "system"
+        for c in raw_conns:
+            p_info = self.known_pids.get(c["pid"], {"name": default_name, "path": ""})
+            resolved.append({
+                **c,
+                "process_name": p_info.get("name", default_name),
+                "process_path": p_info.get("path", ""),
+            })
+        return resolved
 
     def get_running_processes(self, limit: int = 150) -> list[dict[str, Any]]:
         """Return snapshot of currently running processes."""

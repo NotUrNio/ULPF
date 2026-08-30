@@ -30,6 +30,15 @@ from dateutil import parser as dateutil_parser
 
 from ulpf.parsers.base import BaseParser, ParseError
 from ulpf.core.registry import register_parser, get_all_parsers
+from ulpf.core.framing import (
+    BaseFramer,
+    LineFramer,
+    DelimiterFramer,
+    MultilineRegexFramer,
+    JSONStreamFramer,
+    SyslogOctetFramer,
+    FrameResult,
+)
 
 logger = logging.getLogger("ulpf.core.declarative")
 
@@ -97,6 +106,7 @@ class DeclarativeSourceParser(BaseParser):
         self.description = config.get("description", "")
 
         self.framing_cfg = config.get("framing", {})
+        self.framer: BaseFramer = self._build_framer()
         self.detection_cfg = config.get("detection", {})
         self.parser_cfg = config.get("parser", {})
         self.fields_cfg = config.get("fields", {})
@@ -124,6 +134,42 @@ class DeclarativeSourceParser(BaseParser):
                 self._parser_regex = re.compile(self.parser_cfg["pattern"], flags)
             except re.error:
                 pass
+
+    def _build_framer(self) -> BaseFramer:
+        """Instantiate framing layer from framing configuration."""
+        if not self.framing_cfg or not isinstance(self.framing_cfg, dict):
+            return LineFramer()
+
+        ftype = str(self.framing_cfg.get("type", "line")).lower()
+        max_bytes = int(self.framing_cfg.get("max_bytes", 2 * 1024 * 1024))
+
+        if ftype in ("multiline", "multiline_regex", "regex_multiline", "regex"):
+            pattern = self.framing_cfg.get("pattern") or self.framing_cfg.get("start_pattern") or r"^\d{4}-\d{2}-\d{2}"
+            flags = re.MULTILINE
+            if self.framing_cfg.get("case_insensitive"):
+                flags |= re.IGNORECASE
+            return MultilineRegexFramer(
+                start_pattern=pattern,
+                flags=flags,
+                max_bytes=max_bytes,
+            )
+        elif ftype == "delimiter":
+            delim = self.framing_cfg.get("delimiter", "###EVENT_END###")
+            return DelimiterFramer(delimiter=delim, max_bytes=max_bytes)
+        elif ftype in ("json_stream", "json"):
+            return JSONStreamFramer(max_bytes=max_bytes)
+        elif ftype in ("syslog_octet", "octet_counting"):
+            return SyslogOctetFramer(max_bytes=max_bytes)
+        else:
+            return LineFramer(max_bytes=max_bytes)
+
+    def get_framer(self) -> BaseFramer:
+        """Return the configured framer for this declarative source."""
+        return self.framer
+
+    def frame(self, stream: Any) -> Any:
+        """Frame an incoming stream or iterable of chunks into discrete FrameResults."""
+        return self.framer.frame(stream)
 
     def match(self, raw_line: str) -> bool:
         """Evaluate detection rules against raw log line."""
