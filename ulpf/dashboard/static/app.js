@@ -1032,7 +1032,46 @@
   }
 
   // --------------------------------------------------------------------------
-  // Live Socket Connections Management
+  // Toast Notification & Clipboard Helpers
+  // --------------------------------------------------------------------------
+  function showToast(message, type = "success") {
+    let toast = document.getElementById("ulpfToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "ulpfToast";
+      toast.className = "ulpf-toast";
+      document.body.appendChild(toast);
+    }
+    toast.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${type === 'success' ? '#10b981' : '#f59e0b'}" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+      <span>${escapeHtml(message)}</span>
+    `;
+    toast.classList.add("show");
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => {
+      toast.classList.remove("show");
+    }, 2200);
+  }
+
+  function copyToClipboard(text, label = "Item") {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`Copied ${label} to clipboard!`);
+    }).catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      showToast(`Copied ${label} to clipboard!`);
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Live Sockets & Host Telemetry Management
   // --------------------------------------------------------------------------
   function handleConnectionUpdate(data) {
     if (!data) return;
@@ -1042,11 +1081,19 @@
     state.liveMonitorRunning = !!stats.running;
     state.liveMonitorStats = stats;
 
+    const dbConns = conns.filter((c) => {
+      const p = c.dst_port || c.src_port;
+      const svc = (c.service_inferred || "").toLowerCase();
+      return [3306, 5432, 1433, 1521, 27017, 6379].includes(p) || svc.includes("mysql") || svc.includes("database") || svc.includes("postgres") || svc.includes("redis");
+    });
+    const remoteConns = conns.filter((c) => !c.is_localhost);
+    const cleanConns = conns.filter((c) => !(c.pid === 0 && (c.state === "TIME_WAIT" || c.state === "CLOSE_WAIT")));
+
     // Update connection badge on tab
     const badge = document.getElementById("tabConnectionsBadge");
     if (badge) {
-      badge.textContent = conns.length;
-      badge.style.display = conns.length > 0 ? "inline-block" : "none";
+      badge.textContent = cleanConns.length;
+      badge.style.display = cleanConns.length > 0 ? "inline-block" : "none";
     }
 
     // Update Connection Metrics
@@ -1055,18 +1102,25 @@
     const remoteEl = document.getElementById("connStatRemote");
     const lastScanEl = document.getElementById("connStatLastScan");
 
-    const dbConns = conns.filter((c) => {
-      const p = c.dst_port || c.src_port;
-      const svc = (c.service_inferred || "").toLowerCase();
-      return [3306, 5432, 1433, 1521, 27017, 6379].includes(p) || svc.includes("mysql") || svc.includes("database") || svc.includes("postgres") || svc.includes("redis");
-    });
-    const remoteConns = conns.filter((c) => !c.is_localhost);
+    const badgeClean = document.getElementById("badgeCleanCount");
+    const badgeDB = document.getElementById("badgeDBCount");
+    const badgeRemote = document.getElementById("badgeRemoteCount");
 
-    if (totalEl) totalEl.textContent = conns.length;
-    if (dbEl) dbEl.textContent = dbConns.length;
-    if (remoteEl) remoteEl.textContent = remoteConns.length;
+    if (totalEl) totalEl.textContent = conns.length.toLocaleString();
+    if (dbEl) dbEl.textContent = dbConns.length.toLocaleString();
+    if (remoteEl) remoteEl.textContent = remoteConns.length.toLocaleString();
+    if (badgeClean) badgeClean.textContent = cleanConns.length;
+    if (badgeDB) badgeDB.textContent = dbConns.length;
+    if (badgeRemote) badgeRemote.textContent = remoteConns.length;
+
     if (lastScanEl) {
-      lastScanEl.textContent = stats.last_scan_time ? formatTimestamp(stats.last_scan_time) : (conns.length > 0 ? "Live" : "--");
+      if (stats.last_scan_time) {
+        lastScanEl.textContent = formatTimestamp(stats.last_scan_time);
+      } else if (conns.length > 0) {
+        lastScanEl.textContent = "Live Stream (<5ms)";
+      } else {
+        lastScanEl.textContent = "--";
+      }
     }
 
     // Update control button and alert banner
@@ -1081,6 +1135,7 @@
   function updateLiveMonitorControls(stats) {
     const btn = document.getElementById("btnToggleLiveMonitor");
     const statusText = document.getElementById("connStreamStatusText");
+    const statusBadge = document.getElementById("connStreamStatus");
     const alertBox = document.getElementById("connPermissionAlert");
     const alertText = document.getElementById("connPermissionAlertText");
 
@@ -1089,18 +1144,25 @@
 
     if (btn) {
       if (isRunning) {
-        btn.textContent = "⏹ Stop Live Monitor";
-        btn.style.background = "var(--color-danger)";
-        btn.style.borderColor = "var(--color-danger)";
+        btn.className = "btn-conn-stop";
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg> <span>Stop Monitor</span>`;
       } else {
-        btn.textContent = "▶ Start Live Monitor";
-        btn.style.background = "var(--color-success)";
-        btn.style.borderColor = "var(--color-success)";
+        btn.className = "btn-conn-start";
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>Start Live Monitor</span>`;
       }
     }
 
     if (statusText) {
-      statusText.textContent = isRunning ? "Active Monitoring" : "Monitor Inactive";
+      statusText.textContent = isRunning ? "Live Monitoring (0.5s)" : "Monitor Inactive";
+    }
+    if (statusBadge) {
+      if (isRunning) {
+        statusBadge.classList.add("active");
+        statusBadge.style.color = "var(--color-success)";
+      } else {
+        statusBadge.classList.remove("active");
+        statusBadge.style.color = "var(--text-muted)";
+      }
     }
 
     if (alertBox && alertText) {
@@ -1114,30 +1176,31 @@
   }
 
   async function fetchConnections() {
+    const refreshBtn = document.getElementById("btnRefreshConnections");
+    if (refreshBtn) refreshBtn.classList.add("spinning");
     try {
       const res = await fetch("/api/live-monitor/connections");
       if (!res.ok) return;
       const data = await res.json();
       handleConnectionUpdate(data);
+      showToast("Refreshed socket snapshot", "success");
     } catch (e) {
       console.warn("fetchConnections error:", e);
+    } finally {
+      if (refreshBtn) {
+        setTimeout(() => refreshBtn.classList.remove("spinning"), 500);
+      }
     }
   }
 
-  function renderConnectionsTable() {
-    const tbody = document.getElementById("connectionsTableBody");
-    if (!tbody) return;
-
-    if (!state.liveMonitorRunning && (!state.connections || state.connections.length === 0)) {
-      tbody.innerHTML = `<tr><td colspan="8" class="host-empty">Live Socket Monitor is inactive. Click "Start Live Monitor" above to begin real-time socket inspection.</td></tr>`;
-      return;
-    }
-
+  function getFilteredConnections() {
     let list = state.connections || [];
-    const filter = (state.connFilters && state.connFilters.filter) ? state.connFilters.filter : "all";
+    const filter = (state.connFilters && state.connFilters.filter) ? state.connFilters.filter : "clean";
     const search = (state.connFilters && state.connFilters.search ? state.connFilters.search : "").toLowerCase();
 
-    if (filter === "db") {
+    if (filter === "clean") {
+      list = list.filter((c) => !(c.pid === 0 && (c.state === "TIME_WAIT" || c.state === "CLOSE_WAIT")));
+    } else if (filter === "db") {
       list = list.filter((c) => {
         const p = c.dst_port || c.src_port;
         const svc = (c.service_inferred || "").toLowerCase();
@@ -1151,13 +1214,36 @@
 
     if (search) {
       list = list.filter((c) => {
-        const str = `${c.pid} ${c.process_name} ${c.src_ip} ${c.src_port} ${c.dst_ip} ${c.dst_port} ${c.service_inferred} ${c.state}`.toLowerCase();
+        const str = `${c.pid} ${c.process_name} ${c.src_ip} ${c.src_port} ${c.dst_ip} ${c.dst_port} ${c.service_inferred} ${c.state} ${c.proto}`.toLowerCase();
         return str.includes(search);
       });
     }
+    return list;
+  }
+
+  function renderConnectionsTable() {
+    const tbody = document.getElementById("connectionsTableBody");
+    if (!tbody) return;
+
+    if (!state.liveMonitorRunning && (!state.connections || state.connections.length === 0)) {
+      tbody.innerHTML = `<tr><td colspan="9" class="host-empty">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:24px 0;">
+          <div style="font-size:1.8rem;">📡</div>
+          <div style="font-weight:600; color:var(--text-primary);">Live Socket Monitor is Inactive</div>
+          <div style="font-size:0.8rem; color:var(--text-muted); max-width:420px; text-align:center;">
+            Click <strong>"Start Live Monitor"</strong> above to capture sub-second TCP/UDP socket activity, active MySQL sessions, and external telemetry with zero SIEM grid pollution.
+          </div>
+        </div>
+      </td></tr>`;
+      return;
+    }
+
+    const list = getFilteredConnections();
 
     if (list.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="host-empty">No socket connections matching current filters.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="host-empty">
+        <div style="padding:20px 0;">No active socket connections matching current filters.</div>
+      </td></tr>`;
       return;
     }
 
@@ -1165,48 +1251,97 @@
       .map((c) => {
         const isLocal = !!c.is_localhost;
         const scopeBadge = isLocal
-          ? `<span class="badge badge-subtle" style="font-size: 0.72rem;">Localhost</span>`
-          : `<span class="badge badge-allow" style="font-size: 0.72rem;">Remote</span>`;
+          ? `<span class="badge badge-subtle" style="font-size:0.7rem; letter-spacing:0.02em;">Localhost</span>`
+          : `<span class="badge" style="background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); color:#c084fc; font-size:0.7rem; font-weight:600;">Remote</span>`;
 
-        const isDB = (c.service_inferred || "").toLowerCase().includes("mysql") ||
-                     (c.service_inferred || "").toLowerCase().includes("database") ||
+        const svcLower = (c.service_inferred || "").toLowerCase();
+        const isDB = svcLower.includes("mysql") ||
+                     svcLower.includes("database") ||
+                     svcLower.includes("postgres") ||
+                     svcLower.includes("redis") ||
                      [3306, 5432, 1433, 1521, 27017, 6379].includes(c.dst_port) ||
                      [3306, 5432, 1433, 1521, 27017, 6379].includes(c.src_port);
 
-        const svcBadge = isDB
-          ? `<span class="badge badge-cat-network" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); font-weight: 600;">🗄 ${escapeHtml(c.service_inferred || "Database")}</span>`
-          : `<span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(c.service_inferred || "TCP Socket")}</span>`;
+        let svcBadge = `<span class="conn-badge-generic">🔹 ${escapeHtml(c.service_inferred || "TCP Socket")}</span>`;
+        if (isDB) {
+          svcBadge = `<span class="conn-badge-db">🗄️ ${escapeHtml(c.service_inferred || "Database")}</span>`;
+        } else if (svcLower.includes("http") || svcLower.includes("api") || [80, 443, 8000, 8080, 5000].includes(c.dst_port) || [80, 443, 8000, 8080, 5000].includes(c.src_port)) {
+          svcBadge = `<span class="conn-badge-http">🌐 ${escapeHtml(c.service_inferred || "HTTP / API")}</span>`;
+        }
 
-        const stateColor = (c.state === "ESTABLISHED" || c.state === "5") ? "var(--color-success)" : "var(--text-muted)";
-        const stateHtml = `<span class="mono-text" style="font-size: 0.75rem; color: ${stateColor}; font-weight: 600;">${escapeHtml(c.state || "ESTABLISHED")}</span>`;
+        const isEst = (c.state === "ESTABLISHED" || c.state === "5");
+        const isListen = (c.state === "LISTEN" || c.state === "LISTENING");
+        const dotClass = isEst ? "green" : (isListen ? "orange" : "gray");
+        const stateHtml = `<span class="conn-state-pill"><span class="conn-state-dot ${dotClass}"></span>${escapeHtml(c.state || "ESTABLISHED")}</span>`;
 
         const pName = c.process_name || "system";
         const pPath = c.process_path ? ` title="${escapeHtml(c.process_path)}"` : "";
+        const isTCP = (c.proto || "tcp").toLowerCase() === "tcp";
+        const protoBadge = `<span class="badge" style="background:${isTCP ? 'rgba(56,189,248,0.12)' : 'rgba(192,132,252,0.12)'}; color:${isTCP ? '#38bdf8' : '#c084fc'}; border:1px solid ${isTCP ? 'rgba(56,189,248,0.25)' : 'rgba(192,132,252,0.25)'}; font-size:0.72rem; font-weight:700;">${(c.proto || "TCP").toUpperCase()}</span>`;
+
+        const srcEndpoint = `${c.src_ip}:${c.src_port}`;
+        const dstEndpoint = `${c.dst_ip}:${c.dst_port}`;
+        const fiveTuple = `${srcEndpoint} -> ${dstEndpoint} (${c.proto || 'tcp'})`;
 
         return `
           <tr>
             <td>
-              <strong style="color: var(--text-primary); font-size: 0.85rem;"${pPath}>${escapeHtml(pName)}</strong>
-              <span class="mono-text" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;">(${c.pid})</span>
+              <div class="conn-process-badge"${pPath}>
+                <span style="font-weight:600; color:var(--text-primary); font-size:0.84rem;">${escapeHtml(pName)}</span>
+                <span class="conn-pid-tag">${c.pid}</span>
+              </div>
             </td>
-            <td><span class="badge badge-subtle" style="font-size: 0.72rem; font-weight: 600;">${(c.proto || "TCP").toUpperCase()}</span></td>
-            <td class="mono-text" style="font-size: 0.8rem;">${escapeHtml(c.src_ip)}:${c.src_port}</td>
-            <td style="color: var(--text-muted); text-align: center;">→</td>
-            <td class="mono-text" style="font-size: 0.8rem; font-weight: 600;">${escapeHtml(c.dst_ip)}:${c.dst_port}</td>
+            <td>${protoBadge}</td>
+            <td>
+              <div class="conn-endpoint-pill btn-copy-src" data-val="${escapeHtml(srcEndpoint)}" title="Click to copy source endpoint">
+                <span>${escapeHtml(srcEndpoint)}</span>
+                <svg class="conn-copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </div>
+            </td>
+            <td style="color:var(--text-muted); text-align:center; font-size:0.85rem;">➔</td>
+            <td>
+              <div class="conn-endpoint-pill btn-copy-dst" data-val="${escapeHtml(dstEndpoint)}" title="Click to copy destination endpoint">
+                <span style="font-weight:600;">${escapeHtml(dstEndpoint)}</span>
+                <svg class="conn-copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </div>
+            </td>
             <td>${svcBadge}</td>
             <td>${stateHtml}</td>
             <td>${scopeBadge}</td>
+            <td style="text-align:center;">
+              <button class="btn-action-copy btn-copy-5tuple" data-tuple="${escapeHtml(fiveTuple)}" title="Copy 5-tuple (${escapeHtml(fiveTuple)})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </td>
           </tr>
         `;
       })
       .join("");
+
+    // Attach copy listeners
+    tbody.querySelectorAll(".btn-copy-src, .btn-copy-dst").forEach((pill) => {
+      pill.addEventListener("click", () => {
+        const val = pill.getAttribute("data-val");
+        copyToClipboard(val, `endpoint "${val}"`);
+      });
+    });
+
+    tbody.querySelectorAll(".btn-copy-5tuple").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tuple = btn.getAttribute("data-tuple");
+        copyToClipboard(tuple, `connection 5-tuple`);
+      });
+    });
   }
 
   function setupConnectionsPanel() {
     const toggleBtn = document.getElementById("btnToggleLiveMonitor");
     const refreshBtn = document.getElementById("btnRefreshConnections");
+    const copyListBtn = document.getElementById("btnCopyAllConns");
     const chips = document.getElementById("connFilterChips");
     const searchInp = document.getElementById("connSearchInput");
+
+    state.connFilters = state.connFilters || { filter: "clean", search: "" };
 
     if (toggleBtn) {
       toggleBtn.addEventListener("click", async () => {
@@ -1218,6 +1353,7 @@
           if (res.ok) {
             const data = await res.json();
             handleConnectionUpdate(data);
+            showToast(isRunning ? "Stopped Live Monitor" : "Started Live System Monitor", "success");
           }
         } catch (e) {
           console.warn("Toggle live monitor error:", e);
@@ -1231,13 +1367,25 @@
       refreshBtn.addEventListener("click", () => fetchConnections());
     }
 
+    if (copyListBtn) {
+      copyListBtn.addEventListener("click", () => {
+        const list = getFilteredConnections();
+        if (!list || list.length === 0) {
+          showToast("No active connections to copy", "warning");
+          return;
+        }
+        const text = list.map((c) => `${c.proto || 'tcp'}\t${c.src_ip}:${c.src_port}\t->\t${c.dst_ip}:${c.dst_port}\t${c.process_name || 'system'}(PID:${c.pid})\t${c.service_inferred || 'socket'}\t${c.state}`).join("\n");
+        copyToClipboard(text, `${list.length} connections`);
+      });
+    }
+
     if (chips) {
-      chips.querySelectorAll(".chip").forEach((chip) => {
+      chips.querySelectorAll(".conn-chip").forEach((chip) => {
         chip.addEventListener("click", () => {
-          chips.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+          chips.querySelectorAll(".conn-chip").forEach((c) => c.classList.remove("active"));
           chip.classList.add("active");
           state.connFilters = state.connFilters || {};
-          state.connFilters.filter = chip.getAttribute("data-conn-filter") || "all";
+          state.connFilters.filter = chip.getAttribute("data-conn-filter") || "clean";
           renderConnectionsTable();
         });
       });
@@ -1250,7 +1398,7 @@
           state.connFilters = state.connFilters || {};
           state.connFilters.search = e.target.value;
           renderConnectionsTable();
-        }, 150)
+        }, 120)
       );
     }
   }
