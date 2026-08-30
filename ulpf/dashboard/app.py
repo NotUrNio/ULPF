@@ -810,13 +810,19 @@ def create_app(
     @app.get("/api/stream")
     async def stream_events():
         """
-        Server-Sent Events (SSE) stream pushing newly ingested events in real time.
+        Server-Sent Events (SSE) stream pushing newly ingested events,
+        connection telemetry, and source health metrics in real time.
         """
         ndjson_path = STATE["output_dir"] / "events.ndjson"
 
         async def event_generator():
             last_pos = ndjson_path.stat().st_size if ndjson_path.exists() else 0
+            tick_counter = 0
+
             while True:
+                now_iso = datetime.now(timezone.utc).isoformat()
+
+                # 1. Stream new ingested events
                 if ndjson_path.exists():
                     current_size = ndjson_path.stat().st_size
                     if current_size > last_pos:
@@ -826,12 +832,72 @@ def create_app(
                                 line_str = line.strip()
                                 if line_str:
                                     try:
-                                        # Parse and sync
                                         event_data = json.loads(line_str)
-                                        yield f"data: {json.dumps(event_data)}\n\n"
+                                        # Yield typed envelope
+                                        envelope = {
+                                            "type": "event_ingested",
+                                            "timestamp": now_iso,
+                                            "data": event_data,
+                                        }
+                                        yield f"data: {json.dumps(envelope)}\n\n"
                                     except Exception:
                                         pass
                             last_pos = f.tell()
+
+                # 2. Periodic state broadcasts (~every 1.5s, 15 ticks of 0.1s)
+                tick_counter += 1
+                if tick_counter >= 15:
+                    tick_counter = 0
+
+                    # 2a. Live Connection updates if monitor is active
+                    if "live_monitor" in STATE and STATE["live_monitor"] is not None:
+                        monitor = STATE["live_monitor"]
+                        if monitor.is_running():
+                            try:
+                                conns = monitor.get_active_connections()
+                                stats = monitor.get_stats()
+                                conn_envelope = {
+                                    "type": "connection_update",
+                                    "timestamp": now_iso,
+                                    "data": {
+                                        "connections": conns,
+                                        "stats": stats,
+                                        "count": len(conns),
+                                    },
+                                }
+                                yield f"data: {json.dumps(conn_envelope)}\n\n"
+                            except Exception as e:
+                                logger.warning(f"SSE connection_update failed: {e}")
+
+                    # 2b. Source health & metrics update
+                    if "source_manager" in STATE and STATE["source_manager"] is not None:
+                        try:
+                            sm = STATE["source_manager"]
+                            sources_envelope = {
+                                "type": "source_health_update",
+                                "timestamp": now_iso,
+                                "data": {
+                                    "sources": sm.list_sources(),
+                                    "metrics": sm.get_pipeline_metrics(),
+                                },
+                            }
+                            yield f"data: {json.dumps(sources_envelope)}\n\n"
+                        except Exception as e:
+                            logger.warning(f"SSE source_health_update failed: {e}")
+
+                    # 2c. Overall dashboard stats update
+                    if "indexer" in STATE and STATE["indexer"] is not None:
+                        try:
+                            idx = STATE["indexer"]
+                            stats_envelope = {
+                                "type": "metrics_update",
+                                "timestamp": now_iso,
+                                "data": idx.get_stats(),
+                            }
+                            yield f"data: {json.dumps(stats_envelope)}\n\n"
+                        except Exception as e:
+                            logger.warning(f"SSE metrics_update failed: {e}")
+
                 await asyncio.sleep(0.1)
 
         return StreamingResponse(
@@ -852,7 +918,6 @@ def create_app(
         """Start real-time OS event and process monitoring (sub-second resolution)."""
         from ulpf.collectors.live_monitor import LiveSystemMonitor
 
-        global LIVE_MONITOR
         if "live_monitor" not in STATE or STATE["live_monitor"] is None:
             STATE["live_monitor"] = LiveSystemMonitor(
                 output_dir=STATE["output_dir"],
@@ -889,8 +954,11 @@ def create_app(
             "running": False,
             "events_captured": 0,
             "tracked_processes": 0,
+            "tracked_connections": 0,
             "interval_ms": 250,
             "platform": sys.platform,
+            "permission_error": None,
+            "scan_status": "stopped",
         }
 
     @app.get("/api/live-monitor/events")
@@ -905,9 +973,20 @@ def create_app(
     async def get_live_monitor_connections():
         """Get currently active process outbound network connections (only when monitor is active)."""
         if "live_monitor" in STATE and STATE["live_monitor"] is not None:
-            if STATE["live_monitor"].is_running():
-                return {"connections": STATE["live_monitor"].get_active_connections()}
-        return {"connections": []}
+            monitor = STATE["live_monitor"]
+            if monitor.is_running():
+                return {
+                    "connections": monitor.get_active_connections(),
+                    "stats": monitor.get_stats(),
+                    "running": True,
+                    "permission_error": monitor.permission_error,
+                }
+        return {
+            "connections": [],
+            "stats": {"running": False, "tracked_connections": 0},
+            "running": False,
+            "permission_error": None,
+        }
 
     @app.get("/api/live-monitor/processes")
     async def get_live_monitor_processes(limit: int = 150):

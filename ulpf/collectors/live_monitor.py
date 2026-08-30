@@ -143,6 +143,8 @@ class LiveSystemMonitor:
         self.event_history: deque = deque(maxlen=250)
         self.events_captured = 0
         self.seen_win_record_ids: set[str] = set()
+        self.permission_error: str | None = None
+        self.last_scan_time: datetime.datetime | None = None
 
         # Initialize Windows DLLs
         self.is_windows = self.os_type == "windows"
@@ -271,18 +273,29 @@ class LiveSystemMonitor:
                             })
         except Exception as e:
             logger.debug(f"TCP scan error: {e}")
+        self.last_scan_time = datetime.datetime.now(datetime.timezone.utc)
         return conns
 
     def _scan_network_connections_posix(self) -> list[dict[str, Any]]:
         """
         Scan active network sockets on Linux / macOS / POSIX systems using psutil.
         Returns identical schema to Windows network scan.
+        Distinguishes psutil.AccessDenied from empty connection list and surfaces
+        it through self.permission_error and get_stats().
         """
         conns: list[dict[str, Any]] = []
         try:
             import psutil
-            # Scan inet connections (TCP + UDP)
-            for sconn in psutil.net_connections(kind="inet"):
+        except ImportError:
+            self.permission_error = "psutil is not installed (required for POSIX socket scanning)"
+            logger.warning("psutil is not installed: POSIX live network socket scanning unavailable")
+            return []
+
+        try:
+            raw_sconns = psutil.net_connections(kind="inet")
+            self.permission_error = None
+            self.last_scan_time = datetime.datetime.now(datetime.timezone.utc)
+            for sconn in raw_sconns:
                 if not sconn.raddr:
                     continue
                 dst_ip = str(getattr(sconn.raddr, "ip", "") or "")
@@ -306,8 +319,14 @@ class LiveSystemMonitor:
                         "service_inferred": service_lbl,
                         "is_localhost": dst_ip in ("127.0.0.1", "::1", "localhost") or src_ip in ("127.0.0.1", "::1", "localhost"),
                     })
+        except getattr(psutil, "AccessDenied", Exception) as ad:
+            self.permission_error = "AccessDenied: Insufficient OS privileges to inspect network sockets (run as root/administrator)"
+            logger.warning(f"POSIX network socket scan failed with AccessDenied: {ad}")
+            return []
         except Exception as e:
-            logger.debug(f"POSIX network scan error: {e}")
+            self.permission_error = f"POSIX socket scan error: {e}"
+            logger.warning(f"POSIX network socket scan error: {e}")
+            return []
         return conns
 
     def _build_process_event_xml(
@@ -614,6 +633,9 @@ class LiveSystemMonitor:
                 "platform": self.os_type,
                 "hostname": self.hostname,
                 "username": self.username,
+                "permission_error": self.permission_error,
+                "scan_status": "permission_denied" if self.permission_error else ("running" if self._running else "stopped"),
+                "last_scan_time": self.last_scan_time.isoformat() if self.last_scan_time else None,
             }
 
     def get_recent_events(self, limit: int = 100) -> list[dict[str, Any]]:
