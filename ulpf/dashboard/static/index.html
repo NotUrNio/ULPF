@@ -372,30 +372,37 @@
 
     <!-- Tab 5: Live Sockets & Database Telemetry Panel -->
     <section id="tabContentConnections" class="tab-panel" style="display: none;">
-      <div class="panel-header-row">
-        <div>
-          <h2 style="font-size: 1.15rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2">
+      <!-- Hero Header Bar -->
+      <div class="conn-hero-header">
+        <div class="conn-title-wrap">
+          <div class="conn-radar-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <line x1="12" y1="2" x2="12" y2="12"></line>
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
-            Live Socket & Database Connection Telemetry
-          </h2>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;">
-            Real-time operating system socket inspector detecting outbound database sessions (MySQL 3306, Postgres, Redis), Web Proxy, and API connections.
+          </div>
+          <div>
+            <h2>Live Sockets & DB Connection Inspector</h2>
+            <div class="conn-sub">Real-time host socket inspector capturing MySQL (3306), Postgres, Redis, HTTP APIs, and outbound telemetry.</div>
           </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <div id="connStreamStatus" class="live-badge" style="display: inline-flex; font-size: 0.75rem;">
+        <div class="conn-actions-bar">
+          <div id="connStreamStatus" class="live-badge" style="display: inline-flex; font-size: 0.76rem; padding: 4px 10px;">
             <span class="pulse-dot"></span> <span id="connStreamStatusText">Monitor Inactive</span>
           </div>
-          <button id="btnToggleLiveMonitor" class="btn btn-primary" style="background: var(--color-success); border-color: var(--color-success); font-size: 0.82rem; padding: 6px 14px;">
-            ▶ Start Live Monitor
+          <button id="btnToggleLiveMonitor" class="btn-conn-start" title="Toggle Live System Monitor">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span id="btnToggleLiveMonitorText">Start Live Monitor</span>
           </button>
-          <button id="btnRefreshConnections" class="pagination-btn" style="padding: 6px 12px; font-size: 0.82rem;" title="Refresh Connections Snapshot">
-            🔄 Refresh
+          <button id="btnRefreshConnections" class="btn-conn-refresh" title="Fetch snapshot now">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            Refresh
+          </button>
+          <button id="btnCopyAllConns" class="btn-conn-refresh" title="Copy filtered connections list">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            Copy List
           </button>
         </div>
       </div>
@@ -406,59 +413,87 @@
         <span id="connPermissionAlertText">AccessDenied: Elevated privileges required to scan OS socket connections.</span>
       </div>
 
-      <!-- Connection Metrics Strip -->
-      <div class="source-metrics-strip" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 16px;">
-        <div class="src-stat-box">
-          <span class="src-stat-label">Active Sockets</span>
-          <span id="connStatTotal" class="src-stat-val">0</span>
+      <!-- Cyber Metrics Grid -->
+      <div class="conn-metrics-grid">
+        <div class="conn-metric-card">
+          <div class="conn-card-icon blue">⚡</div>
+          <div class="conn-card-content">
+            <span class="conn-card-label">Active Sockets</span>
+            <span id="connStatTotal" class="conn-card-val">0</span>
+          </div>
         </div>
-        <div class="src-stat-box">
-          <span class="src-stat-label">Database Sessions (MySQL/DB)</span>
-          <span id="connStatDB" class="src-stat-val" style="color: var(--accent-cyan);">0</span>
+        <div class="conn-metric-card">
+          <div class="conn-card-icon amber">🗄️</div>
+          <div class="conn-card-content">
+            <span class="conn-card-label">Database Sessions (MySQL/DB)</span>
+            <span id="connStatDB" class="conn-card-val" style="color: #f59e0b;">0</span>
+          </div>
         </div>
-        <div class="src-stat-box">
-          <span class="src-stat-label">Remote Endpoints</span>
-          <span id="connStatRemote" class="src-stat-val">0</span>
+        <div class="conn-metric-card">
+          <div class="conn-card-icon purple">🌐</div>
+          <div class="conn-card-content">
+            <span class="conn-card-label">Remote Endpoints</span>
+            <span id="connStatRemote" class="conn-card-val" style="color: #a855f7;">0</span>
+          </div>
         </div>
-        <div class="src-stat-box">
-          <span class="src-stat-label">Last OS Scan</span>
-          <span id="connStatLastScan" class="src-stat-val mono-text" style="font-size: 0.85rem;">--</span>
+        <div class="conn-metric-card">
+          <div class="conn-card-icon green">⏱️</div>
+          <div class="conn-card-content">
+            <span class="conn-card-label">Last OS Scan</span>
+            <span id="connStatLastScan" class="conn-card-val" style="font-size: 0.95rem; color: var(--text-secondary);">--</span>
+          </div>
         </div>
       </div>
 
-      <!-- Filter Controls for Connections -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
-        <div class="quick-chips" id="connFilterChips">
-          <span class="chip active" data-conn-filter="all">All Sockets</span>
-          <span class="chip" data-conn-filter="db">Databases Only (MySQL/DB)</span>
-          <span class="chip" data-conn-filter="remote">Remote Only</span>
-          <span class="chip" data-conn-filter="localhost">Localhost Only</span>
+      <!-- Filter Strip -->
+      <div class="conn-filter-strip">
+        <div class="conn-quick-chips" id="connFilterChips">
+          <span class="conn-chip active" data-conn-filter="clean">
+            <span>🛡️ Clean Active</span>
+            <span class="conn-chip-badge" id="badgeCleanCount">0</span>
+          </span>
+          <span class="conn-chip" data-conn-filter="db">
+            <span>🗄️ Databases (MySQL/DB)</span>
+            <span class="conn-chip-badge" id="badgeDBCount">0</span>
+          </span>
+          <span class="conn-chip" data-conn-filter="remote">
+            <span>🌐 Remote Endpoints</span>
+            <span class="conn-chip-badge" id="badgeRemoteCount">0</span>
+          </span>
+          <span class="conn-chip" data-conn-filter="localhost">
+            <span>💻 Localhost Only</span>
+          </span>
+          <span class="conn-chip" data-conn-filter="all">
+            <span>🔥 All Raw Sockets</span>
+          </span>
         </div>
+
         <div class="search-box" style="max-width: 320px;">
           <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input type="text" id="connSearchInput" placeholder="Filter by IP, port, process, service..." style="padding: 6px 12px 6px 32px; font-size: 0.8rem;">
+          <input type="text" id="connSearchInput" placeholder="Filter by IP, port, process, PID, service..." style="padding: 7px 12px 7px 32px; font-size: 0.8rem;">
         </div>
       </div>
 
       <!-- Connections Table -->
-      <div class="sources-table-wrap">
-        <table class="data-table">
+      <div class="conn-table-wrap">
+        <table class="conn-table">
           <thead>
             <tr>
-              <th>PROCESS (PID)</th>
-              <th>PROTO</th>
-              <th>SOURCE ENDPOINT</th>
+              <th style="min-width: 180px;">PROCESS / PID</th>
+              <th style="width: 80px;">PROTO</th>
+              <th style="min-width: 190px;">SOURCE ENDPOINT</th>
               <th style="width: 30px; text-align: center;"></th>
-              <th>DESTINATION ENDPOINT</th>
-              <th>INFERRED SERVICE</th>
-              <th>STATE</th>
-              <th>SCOPE</th>
+              <th style="min-width: 210px;">DESTINATION ENDPOINT</th>
+              <th style="min-width: 160px;">INFERRED SERVICE</th>
+              <th style="width: 110px;">STATE</th>
+              <th style="width: 100px;">SCOPE</th>
+              <th style="width: 70px; text-align: center;">ACTIONS</th>
             </tr>
           </thead>
           <tbody id="connectionsTableBody">
-            <tr><td colspan="8" class="host-empty">Live Socket Monitor is inactive. Click "Start Live Monitor" above to begin real-time socket inspection.</td></tr>
+            <tr><td colspan="9" class="host-empty">Live Socket Monitor is inactive. Click "Start Live Monitor" above to begin real-time socket inspection.</td></tr>
           </tbody>
         </table>
       </div>
