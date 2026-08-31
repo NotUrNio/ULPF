@@ -7,7 +7,6 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white" alt="python" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
   <a href="docker/Dockerfile"><img src="https://img.shields.io/badge/docker-air--gapped%20ready-0f766e?logo=docker&logoColor=white" alt="docker" /></a>
-  <a href="https://github.com/NotUrNio/ULPF"><img src="https://img.shields.io/badge/SIH--2026-SIH26156-purple" alt="SIH26156" /></a>
 </p>
 
 <p align="center">
