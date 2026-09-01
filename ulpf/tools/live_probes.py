@@ -38,15 +38,23 @@ def _scramble_native(password: str, auth_data: bytes) -> bytes:
 
 
 def probe_real_mysql(
-    host: str = "198.51.100.50",
-    port: int = 3306,
-    user: str = "db_admin",
-    password: str = "SecurePass#123",
+    host: str | None = None,
+    port: int | None = None,
+    user: str | None = None,
+    password: str | None = None,
 ) -> dict[str, Any]:
     """
-    Connects to a real MySQL/MariaDB server, performs authentication,
+    Connects to a MySQL/MariaDB server, performs authentication,
     measures latency, and formats real database connection logs.
+    Reads connection details from environment variables (ULPF_MYSQL_HOST,
+    ULPF_MYSQL_PORT, ULPF_MYSQL_USER, ULPF_MYSQL_PASSWORD) or defaults
+    to local/documentation values.
     """
+    import os
+    host = host or os.getenv("ULPF_MYSQL_HOST", "127.0.0.1")
+    port = port or int(os.getenv("ULPF_MYSQL_PORT", "3306"))
+    user = user or os.getenv("ULPF_MYSQL_USER", "db_admin")
+    password = password if password is not None else os.getenv("ULPF_MYSQL_PASSWORD", "")
     start_time = time.perf_counter()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(6.0)
