@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.noturnio.ulpf.dashboard</string>
+    <string>io.ulpf.dashboard</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/ulpf</string>

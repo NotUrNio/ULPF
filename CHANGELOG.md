@@ -1,7 +1,7 @@
 ================================================================================
  UNIVERSAL LOG PRE-PROCESSING FRAMEWORK (ULPF)
  Enterprise Release v1.2.0 - Comprehensive Engineering Update Log
- Author: NotUrNio <niowork477@gmail.com>
+ Maintainer: ULPF Project Team
  Repository: https://github.com/NotUrNio/ULPF
  Date: August 27, 2026
 ================================================================================

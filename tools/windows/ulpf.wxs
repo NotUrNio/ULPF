@@ -1,6 +1,6 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Universal Log Pre-processing Framework (ULPF)"
-           Manufacturer="NotUrNio"
+           Manufacturer="ULPF Project"
            Version="1.2.0.0"
            UpgradeCode="4C5E8D2A-7F1B-4A9E-8B3C-1D5E9F7A2B4C"
            Scope="perMachine">
@@ -56,7 +56,7 @@
                     WorkingDirectory="INSTALLFOLDER"
                     Icon="AppIcon" />
           <RemoveFolder Id="CleanUpShortCut" On="uninstall" />
-          <RegistryValue Root="HKCU" Key="Software\NotUrNio\ULPF" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+          <RegistryValue Root="HKCU" Key="Software\ULPF" Name="installed" Type="integer" Value="1" KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
@@ -69,7 +69,7 @@
                   Target="[INSTALLFOLDER]ULPF-Launcher.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon" />
-        <RegistryValue Root="HKCU" Key="Software\NotUrNio\ULPF" Name="desktop_installed" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\ULPF" Name="desktop_installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
 

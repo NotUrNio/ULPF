@@ -18,7 +18,7 @@ INFO_PLIST_CONTENT = f"""<?xml version="1.0" encoding="UTF-8"?>
     <key>CFBundleDisplayName</key>
     <string>ULPF Operations Dashboard</string>
     <key>CFBundleIdentifier</key>
-    <string>com.noturnio.ulpf.dashboard</string>
+    <string>io.ulpf.dashboard</string>
     <key>CFBundleVersion</key>
     <string>{VERSION}</string>
     <key>CFBundleShortVersionString</key>

@@ -7,7 +7,8 @@ import zipfile
 from pathlib import Path
 
 def create_release_zip():
-    scratch_dir = Path(r"C:\Users\Nitya\.gemini\antigravity\scratch")
+    root_dir = Path(__file__).parent.parent.resolve()
+    scratch_dir = root_dir.parent
     standalone_dir = scratch_dir / "ulpf_standalone"
     dist_dir = standalone_dir / "dist"
     staging_dir = scratch_dir / "ULPF-1.1.0-Release-Bundle"

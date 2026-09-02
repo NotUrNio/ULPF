@@ -337,4 +337,4 @@ ULPF_API_KEY="$(openssl rand -hex 24)" \
 
 ## License
 
-[MIT](LICENSE) © 2026 NotUrNio
+[MIT](LICENSE) © 2026 ULPF Project
