@@ -14,7 +14,7 @@ cp packaging/macos/install_macos.sh "${PKG_ROOT}/usr/local/share/ulpf/"
 
 if command -v pkgbuild >/dev/null 2>&1; then
     pkgbuild --root "${PKG_ROOT}" \
-             --identifier "com.noturnio.ulpf" \
+             --identifier "io.ulpf.framework" \
              --version "${VERSION}" \
              --install-location "/" \
              "${PKG_OUT}"

@@ -8,7 +8,7 @@ from pathlib import Path
 
 def main():
     root_dir = Path(__file__).parent.parent.resolve()
-    scratch_dir = Path(r"C:\Users\Nitya\.gemini\antigravity\scratch")
+    scratch_dir = root_dir.parent
     out_zip = scratch_dir / "ULPF-Complete-All-Platforms-Release.zip"
 
     staging_dir = scratch_dir / "ULPF_Master_Staging"

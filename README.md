@@ -308,4 +308,4 @@ docker compose -f docker/docker-compose.yml up
 
 ## License
 
-[MIT](LICENSE) © 2026 NotUrNio
+[MIT](LICENSE) © 2026 ULPF Project

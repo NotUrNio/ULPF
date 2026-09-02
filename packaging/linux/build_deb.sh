@@ -21,7 +21,7 @@ Section: admin
 Priority: optional
 Architecture: ${ARCH}
 Depends: python3 (>= 3.11), python3-pip
-Maintainer: NotUrNio <niowork477@gmail.com>
+Maintainer: ULPF Project <info@ulpf.local>
 Description: Universal Log Pre-processing Framework (ULPF)
  Enterprise multi-vendor log normalization, forensic raw store, and operations dashboard.
 EOF
