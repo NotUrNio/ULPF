@@ -70,7 +70,7 @@ echo [INFO] Closing this window will NOT stop the dashboard server.
 echo [INFO] To stop the server at any time, run Stop_Dashboard.bat
 echo.
 
-!PYTHON_EXE! -m ulpf.cli dashboard --background --port 8000 --output-dir output
+!PYTHON_EXE! -m ulpf.cli dashboard --background --open-browser --port 8000 --output-dir output
 
 echo.
 echo ======================================================================

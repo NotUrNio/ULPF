@@ -27,7 +27,7 @@ if exist "output\events.ndjson" (
 )
 
 echo [INFO] Launching ULPF Operations Dashboard in persistent background mode...
-!PYTHON_EXE! -m ulpf.cli dashboard --background --port 8000 --output-dir output
+!PYTHON_EXE! -m ulpf.cli dashboard --background --open-browser --port 8000 --output-dir output
 
 echo.
 echo [INFO] Server is active at http://127.0.0.1:8000

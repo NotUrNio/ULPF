@@ -21,5 +21,5 @@ if not defined PYTHON_EXE (
 )
 
 if defined PYTHON_EXE (
-    !PYTHON_EXE! -m ulpf.cli dashboard --background --port 8000 --output-dir output
+    !PYTHON_EXE! -m ulpf.cli dashboard --background --open-browser --port 8000 --output-dir output
 )
