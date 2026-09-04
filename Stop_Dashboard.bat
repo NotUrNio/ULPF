@@ -34,7 +34,7 @@ if defined PYTHON_EXE (
 )
 
 :: Direct PowerShell fallback
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host '[+] Server on port 8000 stopped.' -ForegroundColor Green"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = @(7000, 8000); foreach ($p in $ports) { Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; if (Test-Path 'output\ulpf_dashboard.pid') { Remove-Item 'output\ulpf_dashboard.pid' -Force -ErrorAction SilentlyContinue }; Write-Host '[+] ULPF Dashboard server stopped.' -ForegroundColor Green"
 
 :done
 echo.

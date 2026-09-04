@@ -60,3 +60,6 @@ Thumbs.db
 *.swp
 *.swo
 *.zip
+
+# Test generated sources
+ulpf/schemas/declarative_sources/dynamic_*.yaml
