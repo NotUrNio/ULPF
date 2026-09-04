@@ -115,10 +115,10 @@ class IngestBatchRequest(BaseModel):
     tenant_id: str = "default"
 
 class DeclarativeSourceRequest(BaseModel):
-    config: dict[str, Any]
+    config: dict[str, Any] | str
 
 class TestSourceRequest(BaseModel):
-    config: dict[str, Any]
+    config: dict[str, Any] | str
     sample_event: str
     tenant_id: str = "default"
 
@@ -578,8 +578,17 @@ def create_app(
     @app.post("/api/sources", dependencies=[Depends(_require_api_key)])
     async def create_declarative_source(req: DeclarativeSourceRequest):
         """Register, validate, and activate a new declarative log source."""
+        import yaml
         sm: SourceManager = STATE["source_manager"]
-        success, errors, src = sm.register_declarative_source(req.config)
+        cfg = req.config
+        if isinstance(cfg, str):
+            try:
+                cfg = yaml.safe_load(cfg)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail={"message": "Invalid YAML syntax", "errors": [str(e)]})
+        if not isinstance(cfg, dict):
+            raise HTTPException(status_code=400, detail={"message": "Invalid configuration", "errors": ["Configuration must be a dictionary/mapping."]})
+        success, errors, src = sm.register_declarative_source(cfg)
         if not success:
             raise HTTPException(status_code=400, detail={"message": "Invalid source configuration", "errors": errors})
         return {"status": "ok", "source": src}
@@ -620,10 +629,12 @@ def create_app(
     async def infer_source_mapping(req: InferSourceRequest):
         """Infer draft declarative configuration YAML from a sample log line."""
         from ulpf.core.declarative import infer_declarative_mapping
+        import yaml
         if not req.sample_event or not req.sample_event.strip():
             raise HTTPException(status_code=400, detail="Sample event string is required")
         draft = infer_declarative_mapping(req.sample_event, req.name_hint)
-        return {"draft_config": draft}
+        draft_yaml = yaml.dump(draft, sort_keys=False)
+        return {"draft_config": draft, "draft_yaml": draft_yaml}
 
     @app.post("/api/sources/test")
     async def test_declarative_source(req: TestSourceRequest):
@@ -634,14 +645,40 @@ def create_app(
         from ulpf.core.declarative import DeclarativeSourceParser, validate_declarative_config
         import hashlib
         import uuid
+        import yaml
 
-        valid, errors = validate_declarative_config(req.config)
+        cfg = req.config
+        if isinstance(cfg, str):
+            try:
+                cfg = yaml.safe_load(cfg)
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "errors": [f"YAML syntax error: {e}"],
+                    "warnings": [],
+                    "detected_format": "unknown",
+                    "extracted_fields": {},
+                    "normalized_event": {},
+                    "vendor_attributes": {},
+                }
+        if not isinstance(cfg, dict):
+            return {
+                "valid": False,
+                "errors": ["Configuration must be a valid key-value mapping."],
+                "warnings": [],
+                "detected_format": "unknown",
+                "extracted_fields": {},
+                "normalized_event": {},
+                "vendor_attributes": {},
+            }
+
+        valid, errors = validate_declarative_config(cfg)
         if not valid:
             return {
                 "valid": False,
                 "errors": errors,
                 "warnings": [],
-                "detected_format": req.config.get("log_format", "unknown"),
+                "detected_format": cfg.get("log_format", "unknown"),
                 "extracted_fields": {},
                 "normalized_event": {},
                 "vendor_attributes": {},
@@ -650,9 +687,9 @@ def create_app(
         sample = req.sample_event.strip()
         raw_b = sample.encode("utf-8", errors="surrogateescape")
         raw_hash = hashlib.sha256(raw_b).hexdigest()
-        event_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"ulpf:{req.tenant_id}:{req.config.get('name')}:{raw_hash}"))
+        event_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"ulpf:{req.tenant_id}:{cfg.get('name')}:{raw_hash}"))
 
-        parser = DeclarativeSourceParser(req.config)
+        parser = DeclarativeSourceParser(cfg)
         is_match = parser.match(sample)
 
         warnings = []
