@@ -1851,10 +1851,217 @@
     setupCrosswalkTabs();
     setupOnboardingWizard();
     setupDensityToolbar();
+    setupSettingsModal();
     window.addEventListener("resize", debounce(() => virtualScroller.render(), 100));
 
     // Smooth 0% to 100% startup sequence
     runLoadingSequence();
+  }
+
+  // --------------------------------------------------------------------------
+  // Settings & Server Port Management
+  // --------------------------------------------------------------------------
+  function setupSettingsModal() {
+    const settingsBtn = document.getElementById("settingsBtn");
+    const settingsModal = document.getElementById("settingsModal");
+    const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+    const portInput = document.getElementById("settingPortInput");
+    const currentPortVal = document.getElementById("currentPortVal");
+    const portFeedback = document.getElementById("settingPortFeedback");
+    const hostVal = document.getElementById("settingHostVal");
+    const apiKeyVal = document.getElementById("settingApiKeyVal");
+    const corsVal = document.getElementById("settingCorsVal");
+    const autoOpenChk = document.getElementById("chkAutoOpenBrowser");
+    const btnApplyRestart = document.getElementById("btnApplyRestartPort");
+    const btnSavePort = document.getElementById("btnSavePortConfig");
+    const portChips = document.querySelectorAll(".port-chip");
+
+    const restartOverlay = document.getElementById("restartOverlay");
+    const restartNewPort = document.getElementById("restartNewPort");
+    const restartTargetUrl = document.getElementById("restartTargetUrl");
+    const restartCountdown = document.getElementById("restartCountdown");
+
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/settings");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (currentPortVal) currentPortVal.textContent = data.current_port || "7000";
+        if (portInput) portInput.value = data.configured_port || data.current_port || 7000;
+        if (hostVal) hostVal.textContent = data.host || "127.0.0.1";
+        if (apiKeyVal) apiKeyVal.textContent = data.api_key_enabled ? "🛡️ Protected (ULPF_API_KEY)" : "🔓 Local Single-User Demo";
+        if (corsVal) corsVal.textContent = (data.cors_origins || []).join(", ");
+        if (autoOpenChk) autoOpenChk.checked = data.auto_open_browser !== false;
+
+        // Highlight matching preset chip
+        portChips.forEach((chip) => {
+          chip.classList.toggle("active", chip.dataset.port === String(portInput.value));
+        });
+      } catch (err) {
+        console.warn("loadSettings error:", err);
+      }
+    }
+
+    if (settingsBtn && settingsModal) {
+      settingsBtn.addEventListener("click", () => {
+        loadSettings();
+        settingsModal.classList.add("active");
+      });
+    }
+
+    if (closeSettingsBtn && settingsModal) {
+      closeSettingsBtn.addEventListener("click", () => {
+        settingsModal.classList.remove("active");
+      });
+    }
+
+    if (settingsModal) {
+      settingsModal.addEventListener("click", (e) => {
+        if (e.target === settingsModal) {
+          settingsModal.classList.remove("active");
+        }
+      });
+    }
+
+    // Keyboard shortcut (,) to open settings
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "," && !e.target.matches("input, textarea, select")) {
+        e.preventDefault();
+        loadSettings();
+        settingsModal.classList.add("active");
+      }
+    });
+
+    // Preset port chips
+    portChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        if (portInput) {
+          portInput.value = chip.dataset.port;
+          portChips.forEach((c) => c.classList.remove("active"));
+          chip.classList.add("active");
+          const val = parseInt(portInput.value, 10);
+          if (portFeedback) {
+            portFeedback.textContent = "✓ Valid TCP Port";
+            portFeedback.style.color = "var(--color-success)";
+          }
+          if (btnApplyRestart) btnApplyRestart.disabled = false;
+          if (btnSavePort) btnSavePort.disabled = false;
+        }
+      });
+    });
+
+    if (portInput) {
+      portInput.addEventListener("input", () => {
+        const val = parseInt(portInput.value, 10);
+        if (isNaN(val) || val < 1024 || val > 65535) {
+          if (portFeedback) {
+            portFeedback.textContent = "❌ Invalid port: must be between 1024 and 65535";
+            portFeedback.style.color = "var(--color-danger)";
+          }
+          if (btnApplyRestart) btnApplyRestart.disabled = true;
+          if (btnSavePort) btnSavePort.disabled = true;
+        } else {
+          if (portFeedback) {
+            portFeedback.textContent = "✓ Valid TCP Port";
+            portFeedback.style.color = "var(--color-success)";
+          }
+          if (btnApplyRestart) btnApplyRestart.disabled = false;
+          if (btnSavePort) btnSavePort.disabled = false;
+          portChips.forEach((c) => c.classList.toggle("active", c.dataset.port === String(val)));
+        }
+      });
+    }
+
+    // Save for Next Launch
+    if (btnSavePort) {
+      btnSavePort.addEventListener("click", async () => {
+        const portVal = parseInt(portInput.value, 10);
+        if (isNaN(portVal) || portVal < 1024 || portVal > 65535) {
+          showToast("Please enter a valid port between 1024 and 65535", "error");
+          return;
+        }
+        btnSavePort.disabled = true;
+        btnSavePort.textContent = "Saving...";
+        try {
+          const res = await fetch("/api/settings/port", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              port: portVal,
+              restart: false,
+              auto_open_browser: autoOpenChk ? autoOpenChk.checked : true,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(`✓ Port ${portVal} saved as default for next launch!`);
+            settingsModal.classList.remove("active");
+          } else {
+            showToast(data.detail || "Failed to save port", "error");
+          }
+        } catch (err) {
+          showToast("Error saving port: " + err.message, "error");
+        } finally {
+          btnSavePort.disabled = false;
+          btnSavePort.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save for Next Launch`;
+        }
+      });
+    }
+
+    // Apply & Restart on New Port
+    if (btnApplyRestart) {
+      btnApplyRestart.addEventListener("click", async () => {
+        const portVal = parseInt(portInput.value, 10);
+        if (isNaN(portVal) || portVal < 1024 || portVal > 65535) {
+          showToast("Please enter a valid port between 1024 and 65535", "error");
+          return;
+        }
+        btnApplyRestart.disabled = true;
+        btnApplyRestart.textContent = "Restarting...";
+        try {
+          const res = await fetch("/api/settings/port", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              port: portVal,
+              restart: true,
+              auto_open_browser: autoOpenChk ? autoOpenChk.checked : true,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            settingsModal.classList.remove("active");
+            if (data.status === "restarting") {
+              // Show restart countdown overlay
+              if (restartNewPort) restartNewPort.textContent = data.new_port;
+              if (restartTargetUrl) restartTargetUrl.textContent = data.redirect_url;
+              if (restartOverlay) restartOverlay.style.display = "flex";
+
+              let countdown = 3;
+              if (restartCountdown) restartCountdown.textContent = countdown;
+              const timer = setInterval(() => {
+                countdown -= 1;
+                if (restartCountdown) restartCountdown.textContent = countdown;
+                if (countdown <= 0) {
+                  clearInterval(timer);
+                  window.location.href = data.redirect_url;
+                }
+              }, 1000);
+            } else {
+              showToast(data.message || `Configured port: ${portVal}`);
+            }
+          } else {
+            showToast(data.detail || "Restart failed", "error");
+            btnApplyRestart.disabled = false;
+            btnApplyRestart.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Apply & Restart on New Port`;
+          }
+        } catch (err) {
+          showToast("Restart request error: " + err.message, "error");
+          btnApplyRestart.disabled = false;
+          btnApplyRestart.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Apply & Restart on New Port`;
+        }
+      });
+    }
   }
 
   // --------------------------------------------------------------------------

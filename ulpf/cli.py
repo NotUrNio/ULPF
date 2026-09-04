@@ -628,7 +628,7 @@ def _get_dashboard_status(output_dir: str | Path, host: str, port: int) -> None:
 
 @main.command('dashboard')
 @click.option('--output-dir', '-o', default='output', help='Path to pipeline output directory.')
-@click.option('--port', '-p', default=8000, type=int, help='Port to bind the dashboard server.')
+@click.option('--port', '-p', default=7000, type=int, help='Port to bind the dashboard server.')
 @click.option('--host', default='127.0.0.1', help='Host interface to bind.')
 @click.option('--open-browser/--no-open-browser', default=True, help='Automatically open dashboard in default browser.')
 @click.option('--background', '-b', '--daemon', is_flag=True, default=False, help='Run dashboard persistently in background.')
@@ -636,19 +636,31 @@ def _get_dashboard_status(output_dir: str | Path, host: str, port: int) -> None:
 @click.option('--status', is_flag=True, default=False, help='Check dashboard server status.')
 def dashboard_cmd(output_dir: str, port: int, host: str, open_browser: bool, background: bool, stop: bool, status: bool) -> None:
     """Launch the interactive local web operations dashboard."""
+    import threading
+    import webbrowser
+    import uvicorn
+    from ulpf.dashboard.app import (
+        create_app,
+        _resolve_output_dir,
+        _is_ulpf_running,
+        _wait_for_server,
+        _find_available_port,
+        _load_dashboard_config,
+    )
+
+    resolved = _resolve_output_dir(output_dir)
+
+    # Load persistent port configuration if default port was passed
+    if port == 7000:
+        cfg = _load_dashboard_config(resolved)
+        port = cfg.get("port", 7000)
+
     if stop:
         _stop_dashboard_server(output_dir, host, port)
         return
     if status:
         _get_dashboard_status(output_dir, host, port)
         return
-
-    import threading
-    import webbrowser
-    import uvicorn
-    from ulpf.dashboard.app import create_app, _resolve_output_dir, _is_ulpf_running, _wait_for_server, _find_available_port
-
-    resolved = _resolve_output_dir(output_dir)
 
     if background:
         _spawn_background_server(resolved, host, port, open_browser)
@@ -728,7 +740,7 @@ def dashboard_cmd(output_dir: str, port: int, host: str, open_browser: bool, bac
 
 @main.command('stop')
 @click.option('--output-dir', '-o', default='output', help='Path to pipeline output directory.')
-@click.option('--port', '-p', default=8000, type=int, help='Port of dashboard server.')
+@click.option('--port', '-p', default=7000, type=int, help='Port of dashboard server.')
 @click.option('--host', default='127.0.0.1', help='Host interface.')
 def stop_cmd(output_dir: str, port: int, host: str) -> None:
     """Stop the running background ULPF dashboard server."""
@@ -737,7 +749,7 @@ def stop_cmd(output_dir: str, port: int, host: str) -> None:
 
 @main.command('status')
 @click.option('--output-dir', '-o', default='output', help='Path to pipeline output directory.')
-@click.option('--port', '-p', default=8000, type=int, help='Port of dashboard server.')
+@click.option('--port', '-p', default=7000, type=int, help='Port of dashboard server.')
 @click.option('--host', default='127.0.0.1', help='Host interface.')
 def status_cmd(output_dir: str, port: int, host: str) -> None:
     """Check the status of the ULPF dashboard server."""
@@ -933,7 +945,7 @@ def interactive_menu() -> None:
         click.echo("======================================================================")
         click.echo("       Universal Log Pre-processing Framework (ULPF) v1.2.0")
         click.echo("======================================================================")
-        click.echo("  [1] Launch Operations Dashboard (Web UI on http://127.0.0.1:8000)")
+        click.echo("  [1] Launch Operations Dashboard (Web UI on http://127.0.0.1:7000)")
         click.echo("  [2] Start Dashboard in Background (Persistent)")
         click.echo("  [3] Check Dashboard Server Status")
         click.echo("  [4] Stop Dashboard Server")
@@ -950,18 +962,18 @@ def interactive_menu() -> None:
 
         if choice == "1":
             try:
-                dashboard_cmd.callback(output_dir="output", port=8000, host="127.0.0.1", open_browser=True, background=False, stop=False, status=False)
+                dashboard_cmd.callback(output_dir="output", port=7000, host="127.0.0.1", open_browser=True, background=False, stop=False, status=False)
             except KeyboardInterrupt:
                 click.echo("\nDashboard stopped.")
                 click.pause("Press any key to return to menu...")
         elif choice == "2":
-            dashboard_cmd.callback(output_dir="output", port=8000, host="127.0.0.1", open_browser=True, background=True, stop=False, status=False)
+            dashboard_cmd.callback(output_dir="output", port=7000, host="127.0.0.1", open_browser=True, background=True, stop=False, status=False)
             click.pause("\nPress any key to return to menu...")
         elif choice == "3":
-            _get_dashboard_status("output", "127.0.0.1", 8000)
+            _get_dashboard_status("output", "127.0.0.1", 7000)
             click.pause("\nPress any key to return to menu...")
         elif choice == "4":
-            _stop_dashboard_server("output", "127.0.0.1", 8000)
+            _stop_dashboard_server("output", "127.0.0.1", 7000)
             click.pause("\nPress any key to return to menu...")
         elif choice == "5":
             sample_dir = _find_sample_logs_dir()

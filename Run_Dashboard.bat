@@ -27,9 +27,9 @@ if exist "output\events.ndjson" (
 )
 
 echo [INFO] Launching ULPF Operations Dashboard in persistent background mode...
-!PYTHON_EXE! -m ulpf.cli dashboard --background --open-browser --port 8000 --output-dir output
+!PYTHON_EXE! -m ulpf.cli dashboard --background --open-browser --port 7000 --output-dir output
 
 echo.
-echo [INFO] Server is active at http://127.0.0.1:8000
+echo [INFO] Server is active at http://127.0.0.1:7000
 echo [INFO] You can safely close this window. To stop the server, run Stop_Dashboard.bat
 timeout /t 5 >nul

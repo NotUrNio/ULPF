@@ -35,7 +35,7 @@ import ulpf.parsers  # noqa: F401 (triggers @register_parser)
 # Ensure UTF-8 output on all platforms (Windows cp1252 safe)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:7000"
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 results: list[dict] = []
@@ -88,9 +88,9 @@ def ensure_server_running():
     except Exception:
         pass
 
-    print("[INFO] Dashboard server not running on port 8000. Launching local instance...")
+    print("[INFO] Dashboard server not running on port 7000. Launching local instance...")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "ulpf.dashboard.app:app", "--host", "127.0.0.1", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "ulpf.dashboard.app:app", "--host", "127.0.0.1", "--port", "7000"],
         cwd=str(PROJECT_ROOT),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
@@ -129,7 +129,7 @@ def main():
     section_header("1. CORE CONNECTIVITY & API HEALTH")
     try:
         stats = _get("/api/stats")
-        record("connectivity", "Dashboard API reachable at http://127.0.0.1:8000", True)
+        record("connectivity", "Dashboard API reachable at http://127.0.0.1:7000", True)
         record("connectivity", "Total normalized events reported", "total_events" in stats,
                f"total_events={stats.get('total_events')}")
         record("connectivity", "Dead-letter quarantine count reported", "dead_letter_count" in stats,

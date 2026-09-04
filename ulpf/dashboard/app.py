@@ -51,7 +51,29 @@ from ulpf.dashboard.indexer import EventIndexer
 logger = logging.getLogger("ulpf.dashboard")
 
 
-def _default_cors_origins(host: str = "127.0.0.1", port: int = 8000) -> list[str]:
+def _load_dashboard_config(output_dir: Path) -> dict[str, Any]:
+    """Load persistent dashboard settings from dashboard_config.json."""
+    cfg_file = output_dir / "dashboard_config.json"
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"port": 7000, "host": "127.0.0.1", "auto_open_browser": True}
+
+
+def _save_dashboard_config(output_dir: Path, config: dict[str, Any]) -> None:
+    """Save persistent dashboard settings to dashboard_config.json."""
+    cfg_file = output_dir / "dashboard_config.json"
+    try:
+        with open(cfg_file, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        logger.warning("Could not save dashboard config: %s", e)
+
+
+def _default_cors_origins(host: str = "127.0.0.1", port: int = 7000) -> list[str]:
     """
     CORS origins for the dashboard. Configurable via ULPF_CORS_ORIGINS
     (comma-separated). Defaults to the dashboard's own bind address — never
@@ -106,6 +128,11 @@ class InferSourceRequest(BaseModel):
 
 class CrosswalkRequest(BaseModel):
     event: dict[str, Any]
+
+class PortSettingsRequest(BaseModel):
+    port: int
+    restart: bool = True
+    auto_open_browser: bool | None = None
 
 # Global state initialized on startup
 STATE: dict[str, Any] = {
@@ -208,7 +235,7 @@ def _remove_pid_file(output_dir: Path) -> None:
 async def lifespan(app: FastAPI):
     output_dir = STATE["output_dir"]
     host = STATE.get("host", "127.0.0.1")
-    port = STATE.get("port", 8000)
+    port = STATE.get("port", 7000)
     _write_pid_file(output_dir, host, port)
 
     logger.info("Initializing ULPF Dashboard backend on output_dir=%s", output_dir)
@@ -230,7 +257,7 @@ async def lifespan(app: FastAPI):
 def create_app(
     output_dir: str | Path | None = None,
     host: str = "127.0.0.1",
-    port: int = 8000,
+    port: int = 7000,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     resolved_dir = _resolve_output_dir(output_dir)
@@ -1005,6 +1032,96 @@ def create_app(
 
 
     # ------------------------------------------------------------------
+    # Settings & Dashboard Server Configuration Endpoints
+    # ------------------------------------------------------------------
+    @app.get("/api/settings")
+    async def get_settings():
+        """Retrieve current dashboard configuration and server settings."""
+        output_dir = STATE.get("output_dir", Path("output"))
+        cfg = _load_dashboard_config(output_dir)
+        host = STATE.get("host", "127.0.0.1")
+        port = STATE.get("port", 7000)
+        return {
+            "current_port": port,
+            "configured_port": cfg.get("port", port),
+            "host": host,
+            "auto_open_browser": cfg.get("auto_open_browser", True),
+            "api_key_enabled": bool(os.environ.get("ULPF_API_KEY")),
+            "cors_origins": _default_cors_origins(host, port),
+            "version": "1.2.0",
+        }
+
+    @app.post("/api/settings/port")
+    async def update_port_settings(req: PortSettingsRequest):
+        """Update dashboard port setting and optionally trigger live restart on new port."""
+        if req.port < 1024 or req.port > 65535:
+            raise HTTPException(status_code=400, detail="Port must be an integer between 1024 and 65535.")
+
+        output_dir = STATE.get("output_dir", Path("output"))
+        cfg = _load_dashboard_config(output_dir)
+        old_port = STATE.get("port", 7000)
+        cfg["port"] = req.port
+        if req.auto_open_browser is not None:
+            cfg["auto_open_browser"] = req.auto_open_browser
+        _save_dashboard_config(output_dir, cfg)
+
+        host = STATE.get("host", "127.0.0.1")
+        check_host = "127.0.0.1" if host in ("0.0.0.0", "::", "localhost") else host
+        redirect_url = f"http://{check_host}:{req.port}"
+
+        if req.restart and req.port != old_port:
+            import subprocess
+
+            async def _restart_server():
+                await asyncio.sleep(0.5)
+                cmd = [
+                    sys.executable,
+                    "-m",
+                    "ulpf.cli",
+                    "dashboard",
+                    "--background",
+                    "--port",
+                    str(req.port),
+                    "--host",
+                    str(host),
+                    "--output-dir",
+                    str(output_dir),
+                    "--no-open-browser",
+                ]
+                extra_kwargs = {}
+                if sys.platform == "win32":
+                    extra_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                else:
+                    extra_kwargs["start_new_session"] = True
+                subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True,
+                    **extra_kwargs,
+                )
+                await asyncio.sleep(1.0)
+                os._exit(0)
+
+            asyncio.create_task(_restart_server())
+            return {
+                "status": "restarting",
+                "old_port": old_port,
+                "new_port": req.port,
+                "redirect_url": redirect_url,
+                "message": f"Dashboard server restarting on port {req.port}...",
+            }
+
+        return {
+            "status": "saved",
+            "old_port": old_port,
+            "new_port": req.port,
+            "redirect_url": redirect_url,
+            "message": f"Port configuration saved as {req.port}. It will take effect on next launch.",
+        }
+
+    # ------------------------------------------------------------------
     # Frontend Static File Serving
     # ------------------------------------------------------------------
     if static_dir.exists():
@@ -1037,7 +1154,7 @@ def _find_sample_logs_dir() -> Path | None:
     return None
 
 
-def _is_ulpf_running(host: str = "127.0.0.1", port: int = 8000) -> bool:
+def _is_ulpf_running(host: str = "127.0.0.1", port: int = 7000) -> bool:
     """Check if an instance of ULPF dashboard is already listening and responsive."""
     import urllib.request
     check_host = "127.0.0.1" if host in ("0.0.0.0", "::", "localhost") else host
@@ -1050,7 +1167,7 @@ def _is_ulpf_running(host: str = "127.0.0.1", port: int = 8000) -> bool:
         return False
 
 
-def _wait_for_server(host: str = "127.0.0.1", port: int = 8000, timeout: float = 6.0) -> bool:
+def _wait_for_server(host: str = "127.0.0.1", port: int = 7000, timeout: float = 6.0) -> bool:
     """Poll until the FastAPI server is accepting connections."""
     import time
     start = time.time()
@@ -1062,7 +1179,7 @@ def _wait_for_server(host: str = "127.0.0.1", port: int = 8000, timeout: float =
     return False
 
 
-def _find_available_port(host: str = "127.0.0.1", start_port: int = 8000, max_attempts: int = 50) -> int:
+def _find_available_port(host: str = "127.0.0.1", start_port: int = 7000, max_attempts: int = 50) -> int:
     """Find the first open TCP port starting from start_port."""
     import socket
     for p in range(start_port, start_port + max_attempts):
@@ -1084,7 +1201,7 @@ def _find_available_port(host: str = "127.0.0.1", start_port: int = 8000, max_at
     help="Path to pipeline output directory containing events.ndjson and raw_store/.",
 )
 @click.option("--host", "-h", default="127.0.0.1", help="Bind host address.")
-@click.option("--port", "-p", default=8000, type=int, help="Bind port number.")
+@click.option("--port", "-p", default=7000, type=int, help="Bind port number.")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload.")
 @click.option("--open-browser/--no-open-browser", default=True, help="Automatically open browser.")
 def main(output_dir: str | None, host: str, port: int, reload: bool, open_browser: bool) -> None:
@@ -1093,6 +1210,11 @@ def main(output_dir: str | None, host: str, port: int, reload: bool, open_browse
     import webbrowser
 
     resolved = _resolve_output_dir(output_dir)
+
+    # Load persistent port configuration if default port was passed
+    if port == 7000:
+        cfg = _load_dashboard_config(resolved)
+        port = cfg.get("port", 7000)
 
     # If events.ndjson is missing or empty, auto-ingest sample logs for turnkey experience
     events_file = resolved / "events.ndjson"
