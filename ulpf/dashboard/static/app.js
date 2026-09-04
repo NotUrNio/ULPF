@@ -103,6 +103,9 @@
     shortcutsModal: document.getElementById("shortcutsModal"),
     closeShortcutsBtn: document.getElementById("closeShortcutsBtn"),
     shortcutsHelpBtn: document.getElementById("shortcutsHelpBtn"),
+    settingsBtn: document.getElementById("settingsBtn"),
+    settingsModal: document.getElementById("settingsModal"),
+    closeSettingsBtn: document.getElementById("closeSettingsBtn"),
 
     // Inspector Details
     inspectEventId: document.getElementById("inspectEventId"),
@@ -1686,7 +1689,11 @@
         }
       } else if (e.key === "Escape") {
         closeInspector();
-        el.shortcutsModal.classList.remove("open");
+        if (el.shortcutsModal) el.shortcutsModal.classList.remove("open");
+        if (el.settingsModal) {
+          el.settingsModal.classList.remove("open");
+          el.settingsModal.classList.remove("active");
+        }
       } else if (e.key === "t" || e.key === "T") {
         toggleColorTheme();
       } else if (e.key === "v" || e.key === "V") {
@@ -1902,23 +1909,41 @@
       }
     }
 
-    if (settingsBtn && settingsModal) {
-      settingsBtn.addEventListener("click", () => {
-        loadSettings();
+    function openSettings() {
+      loadSettings();
+      if (settingsModal) {
+        settingsModal.classList.add("open");
         settingsModal.classList.add("active");
+        settingsModal.style.display = "flex";
+      }
+    }
+
+    function closeSettings() {
+      if (settingsModal) {
+        settingsModal.classList.remove("open");
+        settingsModal.classList.remove("active");
+        settingsModal.style.display = "";
+      }
+    }
+
+    if (settingsBtn) {
+      settingsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openSettings();
       });
     }
 
-    if (closeSettingsBtn && settingsModal) {
-      closeSettingsBtn.addEventListener("click", () => {
-        settingsModal.classList.remove("active");
+    if (closeSettingsBtn) {
+      closeSettingsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        closeSettings();
       });
     }
 
     if (settingsModal) {
       settingsModal.addEventListener("click", (e) => {
         if (e.target === settingsModal) {
-          settingsModal.classList.remove("active");
+          closeSettings();
         }
       });
     }
@@ -1927,8 +1952,7 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "," && !e.target.matches("input, textarea, select")) {
         e.preventDefault();
-        loadSettings();
-        settingsModal.classList.add("active");
+        openSettings();
       }
     });
 
@@ -1995,7 +2019,7 @@
           const data = await res.json();
           if (res.ok) {
             showToast(`✓ Port ${portVal} saved as default for next launch!`);
-            settingsModal.classList.remove("active");
+            closeSettings();
           } else {
             showToast(data.detail || "Failed to save port", "error");
           }
@@ -2030,12 +2054,16 @@
           });
           const data = await res.json();
           if (res.ok) {
-            settingsModal.classList.remove("active");
+            closeSettings();
             if (data.status === "restarting") {
               // Show restart countdown overlay
               if (restartNewPort) restartNewPort.textContent = data.new_port;
               if (restartTargetUrl) restartTargetUrl.textContent = data.redirect_url;
-              if (restartOverlay) restartOverlay.style.display = "flex";
+              if (restartOverlay) {
+                restartOverlay.classList.add("open");
+                restartOverlay.classList.add("active");
+                restartOverlay.style.display = "flex";
+              }
 
               let countdown = 3;
               if (restartCountdown) restartCountdown.textContent = countdown;

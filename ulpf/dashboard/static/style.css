@@ -1055,9 +1055,11 @@ body.resizing {
   transition: opacity var(--transition-fast);
 }
 
-.modal-backdrop.open {
-  opacity: 1;
-  pointer-events: auto;
+.modal-backdrop.open,
+.modal-backdrop.active {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  display: flex !important;
 }
 
 .modal-card {
@@ -1075,7 +1077,8 @@ body.resizing {
   transition: transform var(--transition-fast);
 }
 
-.modal-backdrop.open .modal-card {
+.modal-backdrop.open .modal-card,
+.modal-backdrop.active .modal-card {
   transform: scale(1);
 }
 
