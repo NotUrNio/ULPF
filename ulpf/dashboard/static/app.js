@@ -1116,15 +1116,12 @@
     if (badgeDB) badgeDB.textContent = dbConns.length;
     if (badgeRemote) badgeRemote.textContent = remoteConns.length;
 
-    if (lastScanEl) {
-      if (stats.last_scan_time) {
-        lastScanEl.textContent = formatTimestamp(stats.last_scan_time);
-      } else if (conns.length > 0) {
-        lastScanEl.textContent = "Live Stream (<5ms)";
-      } else {
-        lastScanEl.textContent = "--";
-      }
+    if (stats.last_scan_time) {
+      state.lastScanDate = new Date(stats.last_scan_time);
+    } else if (conns.length > 0 && !state.lastScanDate) {
+      state.lastScanDate = new Date();
     }
+    updateLastScanTicker();
 
     // Update control button and alert banner
     updateLiveMonitorControls(stats);
@@ -1133,6 +1130,55 @@
     if (state.activeTab === "connections") {
       renderConnectionsTable();
     }
+  }
+
+  function updateLastScanTicker() {
+    const lastScanEl = document.getElementById("connStatLastScan");
+    if (!lastScanEl) return;
+
+    if (!state.lastScanDate) {
+      if (state.connections && state.connections.length > 0) {
+        lastScanEl.innerHTML = `<span style="color:var(--color-success); font-weight:600; font-size:0.88rem;">Live Stream (&lt;5ms)</span>`;
+      } else {
+        lastScanEl.textContent = "--";
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const diffMs = Math.max(0, now - state.lastScanDate.getTime());
+    const diffSec = Math.floor(diffMs / 1000);
+    const timeStr = formatTimestamp(state.lastScanDate);
+
+    let ageBadgeText = "";
+    let ageColor = "#10b981";
+    let ageBg = "rgba(16, 185, 129, 0.15)";
+    let ageBorder = "rgba(16, 185, 129, 0.35)";
+
+    if (diffSec <= 0) {
+      ageBadgeText = "Just now";
+    } else if (diffSec < 60) {
+      ageBadgeText = `${diffSec}s ago`;
+    } else {
+      const mins = Math.floor(diffSec / 60);
+      const secs = diffSec % 60;
+      ageBadgeText = `${mins}m ${secs}s ago`;
+      ageColor = "#f59e0b";
+      ageBg = "rgba(245, 158, 11, 0.15)";
+      ageBorder = "rgba(245, 158, 11, 0.35)";
+    }
+
+    lastScanEl.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <span class="mono-text" style="font-size:0.86rem; color:var(--text-primary); font-weight:700; line-height:1.2;">${escapeHtml(timeStr)}</span>
+        <div style="display:inline-flex; align-items:center; gap:5px; margin-top:2px;">
+          <span class="pulse-dot" style="width:6px; height:6px; background:${ageColor};"></span>
+          <span style="display:inline-flex; align-items:center; padding:1px 7px; border-radius:9999px; font-size:0.72rem; font-family:var(--font-mono); font-weight:700; background:${ageBg}; border:1px solid ${ageBorder}; color:${ageColor};">
+            ${ageBadgeText}
+          </span>
+        </div>
+      </div>
+    `;
   }
 
   function updateLiveMonitorControls(stats) {
@@ -1178,19 +1224,19 @@
     }
   }
 
-  async function fetchConnections() {
+  async function fetchConnections(quiet = false) {
     const refreshBtn = document.getElementById("btnRefreshConnections");
-    if (refreshBtn) refreshBtn.classList.add("spinning");
+    if (refreshBtn && !quiet) refreshBtn.classList.add("spinning");
     try {
       const res = await fetch("/api/live-monitor/connections");
       if (!res.ok) return;
       const data = await res.json();
       handleConnectionUpdate(data);
-      showToast("Refreshed socket snapshot", "success");
+      if (!quiet) showToast("Refreshed socket snapshot", "success");
     } catch (e) {
       console.warn("fetchConnections error:", e);
     } finally {
-      if (refreshBtn) {
+      if (refreshBtn && !quiet) {
         setTimeout(() => refreshBtn.classList.remove("spinning"), 500);
       }
     }
@@ -1367,7 +1413,7 @@
     }
 
     if (refreshBtn) {
-      refreshBtn.addEventListener("click", () => fetchConnections());
+      refreshBtn.addEventListener("click", () => fetchConnections(false));
     }
 
     if (copyListBtn) {
@@ -1404,6 +1450,13 @@
         }, 120)
       );
     }
+
+    // High-frequency 1s refresh ticker when live monitor is running to prevent any lag
+    setInterval(() => {
+      if (state.activeTab === "connections" && state.liveMonitorRunning) {
+        fetchConnections(true);
+      }
+    }, 1000);
   }
 
   // --------------------------------------------------------------------------
@@ -1860,6 +1913,9 @@
     setupDensityToolbar();
     setupSettingsModal();
     window.addEventListener("resize", debounce(() => virtualScroller.render(), 100));
+
+    // Continuous 1-second live ticker for Last OS Scan elapsed time
+    setInterval(updateLastScanTicker, 1000);
 
     // Smooth 0% to 100% startup sequence
     runLoadingSequence();

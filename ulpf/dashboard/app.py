@@ -852,6 +852,7 @@ def create_app(
         async def event_generator():
             last_pos = ndjson_path.stat().st_size if ndjson_path.exists() else 0
             tick_counter = 0
+            conn_tick_counter = 0
 
             while True:
                 now_iso = datetime.now(timezone.utc).isoformat()
@@ -878,12 +879,13 @@ def create_app(
                                         pass
                             last_pos = f.tell()
 
-                # 2. Periodic state broadcasts (~every 1.5s, 15 ticks of 0.1s)
+                # 2. Periodic state broadcasts
                 tick_counter += 1
-                if tick_counter >= 15:
-                    tick_counter = 0
+                conn_tick_counter += 1
 
-                    # 2a. Live Connection updates if monitor is active
+                # 2a. Live Connection updates every 1.0s (10 ticks of 0.1s) without lag
+                if conn_tick_counter >= 10:
+                    conn_tick_counter = 0
                     if "live_monitor" in STATE and STATE["live_monitor"] is not None:
                         monitor = STATE["live_monitor"]
                         if monitor.is_running():
@@ -902,6 +904,10 @@ def create_app(
                                 yield f"data: {json.dumps(conn_envelope)}\n\n"
                             except Exception as e:
                                 logger.warning(f"SSE connection_update failed: {e}")
+
+                # 2b. Metrics & Source health updates (~every 1.5s)
+                if tick_counter >= 15:
+                    tick_counter = 0
 
                     # 2b. Source health & metrics update
                     if "source_manager" in STATE and STATE["source_manager"] is not None:
