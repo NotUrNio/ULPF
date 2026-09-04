@@ -2404,12 +2404,142 @@ body.resizing {
   opacity: 1;
 }
 
-/* Dashboard Settings Modal & Controls */
+/* --------------------------------------------------------------------------
+   Global Button & Input Components
+   -------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  line-height: 1.4;
+  user-select: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0284c7 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(6, 182, 212, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #0369a1 100%) !important;
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(6, 182, 212, 0.4);
+}
+
+.btn-secondary {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
+}
+
+.filter-input {
+  background: var(--bg-surface-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  font-size: 0.85rem;
+  transition: all var(--transition-fast);
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* --------------------------------------------------------------------------
+   Settings & Server Port Configuration Modal (Cyber Ops Theme)
+   -------------------------------------------------------------------------- */
+#settingsModal .modal-card {
+  max-width: 600px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.85), 0 0 30px rgba(6, 182, 212, 0.12);
+  overflow: hidden;
+}
+
+[data-theme="dark"] #settingsModal .modal-card {
+  background: linear-gradient(180deg, #0f172a 0%, #090d16 100%);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+#settingsModal .modal-header {
+  background: var(--bg-surface-subtle);
+  border-bottom: 1px solid var(--border-medium);
+  padding: 16px 20px;
+}
+
+[data-theme="dark"] #settingsModal .modal-header {
+  background: rgba(15, 23, 42, 0.7);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+}
+
 .settings-section {
   background: var(--bg-surface-subtle);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 16px 18px;
+  transition: all var(--transition-fast);
+}
+
+[data-theme="dark"] .settings-section {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.settings-section:hover {
+  border-color: var(--accent);
 }
 
 .settings-section-title {
@@ -2422,52 +2552,182 @@ body.resizing {
   margin-bottom: 4px;
 }
 
+#settingPortInput {
+  background: var(--bg-app) !important;
+  color: var(--text-primary) !important;
+  border: 1.5px solid var(--border-medium) !important;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+[data-theme="dark"] #settingPortInput {
+  background: #06090e !important;
+  color: #38bdf8 !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.3) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+#settingPortInput:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25), 0 0 12px rgba(6, 182, 212, 0.3) !important;
+}
+
 .port-chip {
-  padding: 4px 10px;
-  font-size: 0.76rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
   font-weight: 600;
-  border-radius: 9999px;
+  font-family: var(--font-mono);
+  border-radius: var(--radius-full);
   background: var(--bg-surface);
   border: 1px solid var(--border-medium);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
+  user-select: none;
+}
+
+[data-theme="dark"] .port-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #94a3b8;
 }
 
 .port-chip:hover {
-  background: rgba(6, 182, 212, 0.12);
+  background: rgba(6, 182, 212, 0.15);
   border-color: var(--accent);
   color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .port-chip.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
+  background: linear-gradient(135deg, #06b6d4, #0284c7) !important;
+  border-color: #06b6d4 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(6, 182, 212, 0.45);
+}
+
+#btnApplyRestartPort {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0284c7 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4);
+  transition: all var(--transition-fast);
+}
+
+#btnApplyRestartPort:hover {
+  background: linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #0369a1 100%) !important;
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.6);
+  transform: translateY(-1px);
+}
+
+#btnSavePortConfig {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-medium) !important;
+  padding: 9px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+[data-theme="dark"] #btnSavePortConfig {
+  background: rgba(30, 41, 59, 0.7) !important;
+  border-color: rgba(148, 163, 184, 0.25) !important;
+}
+
+#btnSavePortConfig:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  transform: translateY(-1px);
 }
 
 .setting-info-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  transition: all var(--transition-fast);
+}
+
+[data-theme="dark"] .setting-info-card {
+  background: #06090e;
+  border: 1px solid rgba(56, 189, 248, 0.12);
+}
+
+.setting-info-card:hover {
+  border-color: var(--accent);
 }
 
 .setting-info-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .setting-info-val {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
   word-break: break-all;
+}
+
+[data-theme="dark"] .setting-info-val {
+  color: #e2e8f0;
+}
+
+/* Checkbox Toggle Styling in Settings */
+.settings-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+[data-theme="dark"] .settings-checkbox-wrap {
+  background: #06090e;
+  border: 1px solid rgba(56, 189, 248, 0.12);
+}
+
+.settings-checkbox-wrap:hover {
+  border-color: var(--accent);
+}
+
+.settings-checkbox-wrap input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 
